@@ -1,2 +1,9 @@
 ampliphy*
 tests/*
+results/
+results_gs/
+logs/
+mmseqs_db/
+.nextflow/
+.nextflow.log*
+work/

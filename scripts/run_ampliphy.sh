@@ -29,51 +29,51 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 if [ -d "/home/citrusml2004/Ampliphy2" ]; then
     AMPLIPHY_ROOT="/home/citrusml2004/Ampliphy2"
-elif [ -d "$HOME/Ampliphy2" ]; then
-    AMPLIPHY_ROOT="$HOME/Ampliphy2"
 else
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    AMPLIPHY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+    AMPLIPHY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
 
-# スパコン上での実行カレントディレクトリを確実に Ampliphy2 に設定
 cd "$AMPLIPHY_ROOT"
-WORK_DIR="$AMPLIPHY_ROOT"
 
+# ampliphy リポジトリの配置 (/home/citrusml2004/ampliphy へのシンボリックリンク)
+AMPLIPHY_SOURCE="/home/citrusml2004/ampliphy"
+if [ ! -d "$AMPLIPHY_SOURCE" ] && [ -d "$HOME/ampliphy" ]; then
+    AMPLIPHY_SOURCE="$HOME/ampliphy"
+fi
+if [ ! -d "$AMPLIPHY_ROOT/ampliphy" ] && [ -d "$AMPLIPHY_SOURCE" ]; then
+    ln -sfn "$AMPLIPHY_SOURCE" "$AMPLIPHY_ROOT/ampliphy"
+fi
 AMPLIPHY_DIR="$AMPLIPHY_ROOT/ampliphy"
+
+# ampliphy-analysis リポジトリの配置 (/home/citrusml2004/ampliphy-analysis へのシンボリックリンク)
+ANALYSIS_SOURCE="/home/citrusml2004/ampliphy-analysis"
+if [ ! -d "$ANALYSIS_SOURCE" ] && [ -d "$HOME/ampliphy-analysis" ]; then
+    ANALYSIS_SOURCE="$HOME/ampliphy-analysis"
+fi
+if [ ! -d "$AMPLIPHY_ROOT/ampliphy-analysis" ] && [ -d "$ANALYSIS_SOURCE" ]; then
+    ln -sfn "$ANALYSIS_SOURCE" "$AMPLIPHY_ROOT/ampliphy-analysis"
+fi
 DATASET_DIR="$AMPLIPHY_ROOT/ampliphy-analysis/dataset"
 
-# MMseqs2 データベースの保存先 (Ampliphy2/mmseqs_db または既存の mmseqs_db)
-DB_DIR="$AMPLIPHY_ROOT/mmseqs_db"
-if [ ! -d "$DB_DIR" ] && [ -d "$HOME/mmseqs_db" ]; then
+CONFIG_DIR="$AMPLIPHY_ROOT/configs"
+NCBI_DIR="$AMPLIPHY_ROOT/ncbi_taxonomy"
+
+# MMseqs2 データベースの保存先 (/home/citrusml2004 直下の mmseqs_db)
+if [ -d "/home/citrusml2004/mmseqs_db" ]; then
+    DB_DIR="/home/citrusml2004/mmseqs_db"
+else
     DB_DIR="$HOME/mmseqs_db"
 fi
-mkdir -p "$DB_DIR" "$AMPLIPHY_ROOT/logs/ampliphy" "$AMPLIPHY_ROOT/results"
+
+# 必要なディレクトリ群を作成
+mkdir -p "$NCBI_DIR" "$CONFIG_DIR" "$AMPLIPHY_ROOT/logs/ampliphy" "$AMPLIPHY_ROOT/results"
 
 # ------------------------------------------------------------------------------
 # リアルタイムログ出力設定 (LSFの完了バッファリングを回避し、即座にディスクへ出力)
 # ------------------------------------------------------------------------------
-REALTIME_LOG="$AMPLIPHY_ROOT/logs/ampliphy/ampliphy_live_${LSB_JOBID:-master}.log"
+REALTIME_LOG="$AMPLIPHY_ROOT/logs/ampliphy/ampliphy_${LSB_JOBID:-master}.log"
 exec > >(tee -a "$REALTIME_LOG") 2>&1
 echo "リアルタイムログ開始: $(date) -> $REALTIME_LOG"
-
-# ------------------------------------------------------------------------------
-# 実行モード設定:
-#   MODE="cluster" (デフォルト・推奨):
-#     Nextflow が個別の計算タスク (MAFFT, MMseqs2, IQ-TREE) を LSF に直接投入。
-#     空いているすべてのサーバー (mafftsrv0〜5, mafftweb) の空きコアへ自動的に充填されます。
-#   MODE="local":
-#     単一ノード内 (40コア) でローカル並列実行。
-# ------------------------------------------------------------------------------
-MODE="${MODE:-cluster}"
-
-# 各プロセスの並列スレッド・メモリ割当設定
-THREADS=40
-MAX_MEM="200 GB"
-
-# Taxonomy 評価を行うかどうか (デフォルト: false = 旧版同様にオフにして高速化)
-# GS法パイプライン (run_gs_pipeline.sh) で必要なのは *.amp.fa のみなため通常は false で十分です。
-ENABLE_TAXONOMY="${ENABLE_TAXONOMY:-false}"
 
 # 実行対象生物種 (引数がなければ input_fasta 配下の4種すべて)
 if [ "$#" -gt 0 ]; then
@@ -83,14 +83,16 @@ else
 fi
 
 echo "=============================================================================="
-echo "AmpliPhy Pipeline Execution (Cluster-wide Dynamic Scheduling)"
+echo "AmpliPhy Pipeline Execution (Cluster-wide Dynamic Scheduling + TCS Evaluation)"
 echo "Started at:       $(date)"
 echo "Host:             $(hostname)"
-echo "Execution Mode:   $MODE (全サーバー空きスロット動的充填)"
-echo "ENABLE_TAXONOMY:  $ENABLE_TAXONOMY"
+echo "Cluster Mode:     LSF クラスタ全体分散 (mafftsrv0〜5, mafftweb 空きコア動的充填)"
 echo "AMPLIPHY_ROOT:    $AMPLIPHY_ROOT"
+echo "AMPLIPHY_DIR:     $AMPLIPHY_DIR"
 echo "DB_DIR:           $DB_DIR"
+echo "NCBI_DIR:         $NCBI_DIR"
 echo "Target Taxa:      ${TARGET_TAXA[*]}"
+echo "TCS Evaluation:   有効 (taxonomy/<taxon> を使用して元/増幅後ツリーのTCSを自動算出)"
 echo "=============================================================================="
 
 # ------------------------------------------------------------------------------
@@ -130,86 +132,14 @@ activate_env() {
 activate_env "biotools"
 
 # ------------------------------------------------------------------------------
-# 3. リソース設定ファイル生成 (Nextflow Config)
+# 3. リソース設定ファイル (Nextflow Config: クラスタ全体分散)
 # ------------------------------------------------------------------------------
-if [ "$MODE" = "cluster" ]; then
-    # 【クラスタ全体分散モード】
-    # 各タスク (MAFFT=4, MMseqs=8, IQ-TREE=4) を個別ジョブとして LSF に投入。
-    # 空きコアのある任意のサーバー (mafftsrv0〜5, mafftweb) へ自動ディスパッチ。
-    CONFIG_FILE="$AMPLIPHY_DIR/cluster_dynamic.config"
-    cat << 'EOF' > "$CONFIG_FILE"
-executor {
-    name            = 'lsf'
-    queueSize       = 150
-    pollInterval    = '10 sec'
-    submitRateLimit = '5 sec'
-}
-
-process {
-    executor       = 'lsf'
-    clusterOptions = '-R "span[hosts=1]"'
-    beforeScript   = '''
-        set +u
-        source ~/.bashrc 2>/dev/null || true
-        export PATH="$HOME/.local/bin:$HOME/micromamba/bin:$PATH"
-        if command -v micromamba &>/dev/null; then
-            eval "$(micromamba shell hook --shell bash 2>/dev/null)" || true
-            micromamba activate biotools 2>/dev/null || true
-        elif command -v conda &>/dev/null; then
-            eval "$(conda shell.bash hook 2>/dev/null)" || true
-            conda activate biotools 2>/dev/null || true
-        fi
-        set -u
-    '''
-
-    withLabel: 'mmseqs' {
-        cpus   = 8
-        memory = 16.GB
-        time   = 6.h
-    }
-    withLabel: 'tree' {
-        cpus   = 4
-        memory = 16.GB
-        time   = 12.h
-    }
-    withLabel: 'short' {
-        cpus   = 4
-        memory = 8.GB
-        time   = 2.h
-    }
-    withLabel: 'minimal' {
-        cpus   = 1
-        memory = 4.GB
-        time   = 1.h
-    }
-}
-EOF
-else
-    # 【単一ノード内実行モード】
-    CONFIG_FILE="$AMPLIPHY_DIR/local_resource_limit.config"
-    cat << EOF > "$CONFIG_FILE"
-executor {
-    name   = 'local'
-    cpus   = ${THREADS}
-    memory = '${MAX_MEM}'
-}
-
-process {
-    withLabel: 'mmseqs' {
-        cpus     = 8
-        maxForks = 5
-    }
-    withLabel: 'tree' {
-        cpus     = 4
-        maxForks = 10
-    }
-    withLabel: 'short' {
-        cpus     = 4
-        maxForks = 10
-    }
-}
-EOF
+CONFIG_FILE="$CONFIG_DIR/cluster_dynamic.config"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "[ERROR] 設定ファイルが見つかりません: $CONFIG_FILE" >&2
+    exit 1
 fi
+echo "Nextflow Config:  $CONFIG_FILE"
 
 # ------------------------------------------------------------------------------
 # 4. 生物種ごとの実行関数
@@ -230,85 +160,50 @@ run_taxon() {
     echo "# AmpliPhy 実行開始: $taxon ($short_name)"
     echo "##############################################################################"
 
-    # input_fasta ディレクトリ探索
-    local input_dir=""
-    for cand in \
-        "$AMPLIPHY_ROOT/input_fasta/$taxon" \
-        "$WORK_DIR/Ampliphy2/input_fasta/$taxon" \
-        "$WORK_DIR/input_fasta/$taxon"; do
-        if [ -d "$cand" ] && compgen -G "$cand/*.fa" > /dev/null; then
-            input_dir="$cand"
-            break
-        fi
-    done
-
-    if [ -z "$input_dir" ]; then
-        echo "[ERROR] $taxon の入力FASTAフォルダ (input_fasta/$taxon) が見つかりません。" >&2
+    # 入力FASTAディレクトリ (探索なし・Ampliphy2/input_fasta/<taxon> 固定)
+    local input_dir="$AMPLIPHY_ROOT/input_fasta/$taxon"
+    if [ ! -d "$input_dir" ]; then
+        echo "[ERROR] $taxon の入力FASTAフォルダ ($input_dir) が見つかりません。" >&2
         return 1
     fi
 
-    # taxonomy (.tax) ディレクトリの準備 (ENABLE_TAXONOMY=true の場合のみ)
-    local tax_arg=""
-    if [ "$ENABLE_TAXONOMY" = "true" ]; then
-        local tax_dir="$AMPLIPHY_ROOT/taxonomy/$taxon"
-        mkdir -p "$tax_dir"
-
-        if ! compgen -G "$tax_dir/*.tax" > /dev/null; then
-            local meta_tsv="$DATASET_DIR/${short_name}_taxa.tsv"
-            if [ -s "$meta_tsv" ]; then
-                echo "  [Taxonomy] ${short_name}_taxa.tsv から各配列の .tax ファイルを生成中..."
-                python3 -c "
-import glob
-from pathlib import Path
-
-taxa_map = dict(line.strip().split('\t')[:2] for line in open('$meta_tsv') if line.strip())
-fa_files = sorted(glob.glob('$input_dir/*.fa'))
-out_dir = Path('$tax_dir')
-for fa in fa_files:
-    tax_path = out_dir / (Path(fa).stem + '.tax')
-    with open(tax_path, 'w', encoding='utf-8') as out_f, open(fa, 'r', encoding='utf-8') as in_f:
-        for line in in_f:
-            if line.startswith('>'):
-                qid = line[1:].strip().split()[0]
-                code = qid[:5]
-                if code in taxa_map:
-                    out_f.write(f'{qid}\t{taxa_map[code]}\n')
-print(f'  [Taxonomy] {len(fa_files)} 件の .tax ファイルを $tax_dir に生成しました。')
-"
-            fi
-        fi
-        tax_arg="--input_taxonomy $tax_dir"
-        echo "  TAX_DIR:    $tax_dir (有効)"
-    else
-        echo "  TAXONOMY:   無効 (旧版同様にホモログ追加MSA作成に専念して高速化)"
+    # taxonomy (.tax) ディレクトリ (常に有効・Ampliphy2/taxonomy/<taxon> 固定)
+    local tax_dir="$AMPLIPHY_ROOT/taxonomy/$taxon"
+    if [ ! -d "$tax_dir" ] || ! compgen -G "$tax_dir/*.tax" > /dev/null; then
+        echo "[ERROR] $taxon の taxonomy ファイル群 ($tax_dir/*.tax) が見つかりません。" >&2
+        return 1
     fi
 
     # 出力先ディレクトリ
     local output_dir="$AMPLIPHY_ROOT/results/$taxon"
     local work_dir="$output_dir/work"
     local launch_dir="$output_dir/launch"   # 生物種ごとに独立した起動ディレクトリ (.nextflow/ の競合防止)
-    local log_file="$AMPLIPHY_ROOT/logs/ampliphy/nextflow_${taxon}.log"          # .nextflow.log 相当
+    local log_file="$AMPLIPHY_ROOT/logs/ampliphy/nextflow_${taxon}.log"
     local console_log="$AMPLIPHY_ROOT/logs/ampliphy/nextflow_${taxon}.console.log" # 進捗表示 (tail -f 用)
     mkdir -p "$output_dir" "$work_dir" "$launch_dir"
 
     echo "  INPUT_DIR:   $input_dir"
+    echo "  TAX_DIR:     $tax_dir (TCS評価有効)"
     echo "  OUTPUT_DIR:  $output_dir"
     echo "  WORK_DIR:    $work_dir"
     echo "  DB_DIR:      $DB_DIR"
+    echo "  NCBI_DIR:    $NCBI_DIR"
     echo "  CONSOLE_LOG: $console_log  (tail -f で確認可)"
 
     cd "$launch_dir"
     export NXF_OPTS="${NXF_OPTS:--Xms512m -Xmx4g}"
 
-    # Nextflow の標準出力を直接ファイルへリダイレクトする (LSF の -o バッファを経由しない)。
-    # -profile conda は使わない: biotools 環境 (および LSF タスクの beforeScript) を使用する。
+    # Nextflow 実行:
+    # --input_taxonomy を指定することで、homolog_taxonomy, amplified_taxonomy,
+    # input_lineage, amplified_tcs が自動実行され amplified_tcs_report.tsv が生成されます。
     # shellcheck disable=SC2086
     nextflow -log "$log_file" run "$AMPLIPHY_DIR/ampliphy.nf" \
         -ansi-log false \
         -work-dir "$work_dir" \
         -c "$CONFIG_FILE" \
         --input_dir "$input_dir" \
-        $tax_arg \
+        --input_taxonomy "$tax_dir" \
+        --ncbi_dir "$NCBI_DIR" \
         --output_dir "$output_dir" \
         --database UniRef50 \
         --database_dir "$DB_DIR" \
@@ -322,32 +217,40 @@ print(f'  [Taxonomy] {len(fa_files)} 件の .tax ファイルを $tax_dir に生
     echo "AmpliPhy 完了: $taxon"
     echo "  -> 増幅後MSA: $output_dir/msa/*.amp.fa"
     echo "  -> 系統樹:   $output_dir/tree/*.amp.nwk"
-    if [ "$ENABLE_TAXONOMY" = "true" ]; then
-        echo "  -> TCSレポ:  $output_dir/report/amplified_tcs_report.tsv"
-    fi
+    echo "  -> TCSレポ:  $output_dir/report/amplified_tcs_report.tsv"
 }
 
 # ------------------------------------------------------------------------------
-# 5. メインループ実行 (全生物種を同時投入してクラスタ全体をフル稼働)
+# 5. メインループ実行 (クラスタ全体分散投入)
 # ------------------------------------------------------------------------------
 # UniRef50 データベースの事前準備 (並行実行時の重複ダウンロード・競合防止)
 if [ ! -e "$DB_DIR/UniRef50.dbtype" ] && [ ! -e "$DB_DIR/UniRef50" ]; then
     DB_LOG="$AMPLIPHY_ROOT/logs/ampliphy/uniref50_download.log"
     echo "UniRef50 データベースが未準備のため、初回ダウンロードを実行します (数時間かかる場合があります)"
     echo "  進捗: tail -f $DB_LOG"
-    mkdir -p "$WORK_DIR/tmp"
-    mmseqs databases UniRef50 "$DB_DIR/UniRef50" "$WORK_DIR/tmp" > "$DB_LOG" 2>&1
+    mkdir -p "$AMPLIPHY_ROOT/tmp"
+    mmseqs databases UniRef50 "$DB_DIR/UniRef50" "$AMPLIPHY_ROOT/tmp" > "$DB_LOG" 2>&1
     echo "UniRef50 データベースの準備が完了しました。"
 else
     echo "UniRef50 データベース検出済み: $DB_DIR/UniRef50"
 fi
 
-if [ "$MODE" = "cluster" ] && [ "${#TARGET_TAXA[@]}" -gt 1 ]; then
-    echo ""
-    echo "=============================================================================="
-    echo "【クラスタ動的分散モード】全生物種 (${TARGET_TAXA[*]}) を同時並行投入します。"
-    echo "空いている全サーバー (mafftsrv0〜5, mafftweb) の空きコアへ自動的にタスクが分散されます。"
-    echo "=============================================================================="
+# NCBI Taxonomy dump (nodes.dmp, names.dmp) の事前準備 (並行タスク間の重複DL・競合防止)
+if [ ! -f "$NCBI_DIR/nodes.dmp" ] || [ ! -f "$NCBI_DIR/names.dmp" ]; then
+    echo "NCBI Taxonomy データを準備中 ($NCBI_DIR)..."
+    python3 -c "import sys; sys.path.insert(0, '$AMPLIPHY_DIR/bin'); from ampliphy_homolog_taxonomy import ensure_taxdump; from pathlib import Path; ensure_taxdump(Path('$NCBI_DIR'))" || true
+    echo "NCBI Taxonomy データの準備が完了しました。"
+else
+    echo "NCBI Taxonomy 検出済み: $NCBI_DIR"
+fi
+
+echo ""
+echo "=============================================================================="
+echo "クラスタ全体分散投入: 対象生物種 (${TARGET_TAXA[*]})"
+echo "各生物種のNextflowタスク (MAFFT, MMseqs2, IQ-TREE, TCS) が全サーバー (mafftsrv0〜5, mafftweb) へ自動分散されます。"
+echo "=============================================================================="
+
+if [ "${#TARGET_TAXA[@]}" -gt 1 ]; then
     pids=()
     for taxon in "${TARGET_TAXA[@]}"; do
         run_taxon "$taxon" &
@@ -366,14 +269,12 @@ if [ "$MODE" = "cluster" ] && [ "${#TARGET_TAXA[@]}" -gt 1 ]; then
         exit 1
     fi
 else
-    for taxon in "${TARGET_TAXA[@]}"; do
-        run_taxon "$taxon"
-    done
+    run_taxon "${TARGET_TAXA[0]}"
 fi
 
 echo ""
 echo "=============================================================================="
 echo "すべての AmpliPhy パイプライン実行が完了しました: $(date)"
-echo "これで各 results/<taxon>/msa/ 配下にホモログ追加後MSA (*.amp.fa) が揃いました。"
+echo "各 results/<taxon>/ 配下に増幅後MSA (*.amp.fa)、系統樹 (*.amp.nwk)、TCSレポート (report/amplified_tcs_report.tsv) が揃いました。"
 echo "続いて GS法評価 (bsub < scripts/run_gs_pipeline.sh) を実行できます。"
 echo "=============================================================================="

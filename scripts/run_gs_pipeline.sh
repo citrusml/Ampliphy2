@@ -38,11 +38,27 @@ PY_MODULE_DIR="$AMPLIPHY_ROOT"
 
 mkdir -p "$AMPLIPHY_ROOT/logs/gs" "$AMPLIPHY_ROOT/results_gs"
 
-# 外部ツール・スクリプトのパス
-GS2_BIN="${GS2_BIN:-$HOME/gs/gs2}"
-MAD_SCRIPT="${MAD_SCRIPT:-$HOME/tools/mad2.2/mad/mad.py}"
-TCS_SCRIPT="${TCS_SCRIPT:-$AMPLIPHY_ROOT/ampliphy-analysis/scripts/tcs_batch.py}"
-DATASET_DIR="${DATASET_DIR:-$AMPLIPHY_ROOT/ampliphy-analysis/dataset}"
+# 外部ツール・スクリプトのパス (/home/citrusml2004 直下の確定パス)
+GS2_BIN="/home/citrusml2004/gs/gs2"
+if [ ! -f "$GS2_BIN" ]; then
+    GS2_BIN="$HOME/gs/gs2"
+fi
+
+AMPLIPHY_DIR="/home/citrusml2004/ampliphy"
+if [ ! -d "$AMPLIPHY_DIR" ]; then
+    AMPLIPHY_DIR="$HOME/ampliphy"
+fi
+MAD_SCRIPT="$AMPLIPHY_DIR/bin/mad.py"
+
+DATASET_DIR="/home/citrusml2004/ampliphy-analysis/dataset"
+if [ ! -d "$DATASET_DIR" ]; then
+    DATASET_DIR="$HOME/ampliphy-analysis/dataset"
+fi
+
+TCS_SCRIPT="/home/citrusml2004/ampliphy-analysis/scripts/tcs_batch.py"
+if [ ! -f "$TCS_SCRIPT" ]; then
+    TCS_SCRIPT="$HOME/ampliphy-analysis/scripts/tcs_batch.py"
+fi
 
 # スレッド数 (LSF -n 8 割当にあわせてデフォルト 8 スレッド)
 # 8コア要求のため、クラスタ内 (mafftsrv0〜5, mafftweb) の空きコアへ即座に充填されます
@@ -129,54 +145,24 @@ process_taxon() {
     echo "# 生物種グループ開始: $taxon ($short_name)"
     echo "##############################################################################"
 
-    # 入力ディレクトリの自動探索 (Ampliphy2/input_fasta/<taxon> を最優先)
-    local orig_dir=""
-    for cand in \
-        "$PY_MODULE_DIR/input_fasta/$taxon" \
-        "$WORK_DIR/Ampliphy2/input_fasta/$taxon" \
-        "$WORK_DIR/input_fasta/$taxon" \
-        "$WORK_DIR/archive/input_fasta/$taxon"; do
-        if [ -d "$cand" ] && compgen -G "$cand/*.fa" > /dev/null; then
-            orig_dir="$cand"
-            break
-        fi
-    done
-
-    if [ -z "$orig_dir" ]; then
-        echo "[ERROR] $taxon のオリジナルFASTAディレクトリが見つかりません。" >&2
+    # 入力FASTAディレクトリ (探索なし・Ampliphy2/input_fasta/<taxon> 固定)
+    local orig_dir="$AMPLIPHY_ROOT/input_fasta/$taxon"
+    if [ ! -d "$orig_dir" ]; then
+        echo "[ERROR] $taxon のオリジナルFASTAディレクトリ ($orig_dir) が見つかりません。" >&2
         return 1
     fi
 
-    # AmpliPhy 実行後の増幅後MSA (results/<taxon>/msa/*.amp.fa) を最優先探索
-    local amp_dir=""
-    for cand in \
-        "$PY_MODULE_DIR/results/$taxon/msa" \
-        "$WORK_DIR/Ampliphy2/results/$taxon/msa" \
-        "$WORK_DIR/results/$taxon/msa" \
-        "$WORK_DIR/Ampliphy2/results/${taxon}_new/msa" \
-        "$WORK_DIR/results/${taxon}_new/msa" \
-        "$WORK_DIR/results/${taxon}_new/${short_name}3/msa" \
-        "$WORK_DIR/Ampliphy2/results/${taxon}/${short_name}3/msa" \
-        "$WORK_DIR/results/${taxon}/${short_name}3/msa" \
-        "$WORK_DIR/results/${taxon}/1e-3/msa"; do
-        if [ -d "$cand" ] && compgen -G "$cand/*.amp.fa" > /dev/null; then
-            amp_dir="$cand"
-            break
-        elif [ -d "$cand" ] && compgen -G "$cand/*.fa" > /dev/null; then
-            amp_dir="$cand"
-            break
-        fi
-    done
-
-    if [ -z "$amp_dir" ]; then
-        echo "[ERROR] $taxon のホモログ追加後FASTAディレクトリ (AMP_INPUT_DIR) が見つかりません。" >&2
+    # AmpliPhy 実行後の増幅後MSA (Ampliphy2/results/<taxon>/msa/*.amp.fa 固定)
+    local amp_dir="$AMPLIPHY_ROOT/results/$taxon/msa"
+    if [ ! -d "$amp_dir" ] || ! compgen -G "$amp_dir/*.amp.fa" > /dev/null; then
+        echo "[ERROR] $taxon のホモログ追加後FASTAディレクトリ ($amp_dir/*.amp.fa) が見つかりません。" >&2
         echo "       AmpliPhy がまだ実行されていないか、results/$taxon/msa/*.amp.fa が未生成です。" >&2
         echo "       先に 'bsub < scripts/run_ampliphy.sh' を実行してください。" >&2
         return 1
     fi
 
     # 出力ディレクトリ定義
-    local results_dir="$PY_MODULE_DIR/results_gs/$taxon"
+    local results_dir="$AMPLIPHY_ROOT/results_gs/$taxon"
 
     local log_dir="${results_dir}/logs"
     local tree_ori_dir="${results_dir}/tree_ori"
@@ -189,18 +175,11 @@ process_taxon() {
     echo "  AMP_INPUT_DIR:  $amp_dir"
     echo "  RESULTS_DIR:    $results_dir"
 
-    # Lineage TSV の探索・自動生成
+    # Lineage TSV (データセット配下、または自動生成)
     local lineage_tsv=""
-    for cand in \
-        "$DATASET_DIR/${short_name}_lineage.tsv" \
-        "$WORK_DIR/results/${taxon}/${short_name}3/lineage.tsv" \
-        "$WORK_DIR/results/${taxon}_new/${short_name}3/lineage.tsv" \
-        "$WORK_DIR/results/${taxon}/lineage.tsv"; do
-        if [ -s "$cand" ]; then
-            lineage_tsv="$cand"
-            break
-        fi
-    done
+    if [ -s "$DATASET_DIR/${short_name}_lineage.tsv" ]; then
+        lineage_tsv="$DATASET_DIR/${short_name}_lineage.tsv"
+    fi
 
     if [ -z "$lineage_tsv" ]; then
         local taxa_meta="$DATASET_DIR/${short_name}_taxa.tsv"
@@ -236,21 +215,10 @@ generate_lineage_tsv('$taxa_meta', fastas, '$lineage_tsv')
         local fname=$(basename "$orig_fa")
         local hog_id="${fname%.fa}"
 
-        # ホモログ追加後FASTAの探索
-        local amp_fa=""
-        for candidate in \
-            "$amp_dir/${hog_id}.amp.fa" \
-            "$amp_dir/${hog_id}_amp.fa" \
-            "$amp_dir/HOG_${hog_id}.amp.fa" \
-            "$amp_dir/${hog_id}.fa"; do
-            if [ -f "$candidate" ]; then
-                amp_fa="$candidate"
-                break
-            fi
-        done
-
-        if [ -z "$amp_fa" ]; then
-            echo "    [WARN] 対応するホモログ追加後FASTAが見つかりません。スキップ: $hog_id"
+        # ホモログ追加後FASTA (AmpliPhy出力: results/<taxon>/msa/<hog_id>.amp.fa)
+        local amp_fa="${amp_dir}/${hog_id}.amp.fa"
+        if [ ! -f "$amp_fa" ]; then
+            echo "    [WARN] 対応するホモログ追加後FASTAが見つかりません。スキップ: $hog_id ($amp_fa)"
             continue
         fi
 

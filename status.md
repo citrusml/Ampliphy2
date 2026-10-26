@@ -1,3 +1,145 @@
+最終更新: 2026-10-27 02:35
+
+## 📈 進捗状況
+- [x] 完了: ユーザー指定の確定パスに基づき、`run_ampliphy.sh` および `run_gs_pipeline.sh` の探索ループを全撤廃・完全一本化 (完了日: 10/27)
+- [ ] 進行中: スパコン上での AmpliPhy ジョブ実行と進捗確認 (進捗率: 50% / 課題: ジョブ投入と進捗監視)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: スパコン上の各リポジトリやツールの配置場所が確定したため、スクリプト内に残っていたフォールバック用ループ探索コード（`for cand in ...`）を全て排除し、明確で保守性の高い確定パス構成にリファクタリングしたい。
+- **[確定パス]**:
+  - `DB_DIR`: `/home/citrusml2004/mmseqs_db`
+  - `AMPLIPHY_DIR`: `/home/citrusml2004/ampliphy`（`Ampliphy2/ampliphy` へシンボリックリンク保証）
+  - `DATASET_DIR`: `/home/citrusml2004/ampliphy-analysis/dataset`（`Ampliphy2/ampliphy-analysis` へシンボリックリンク保証）
+  - `GS2_BIN`: `/home/citrusml2004/gs/gs2`
+  - `MAD_SCRIPT`: `/home/citrusml2004/ampliphy/bin/mad.py`
+  - `TCS_SCRIPT`: `/home/citrusml2004/ampliphy-analysis/scripts/tcs_batch.py`
+  - `NCBI_DIR`: `/home/citrusml2004/Ampliphy2/ncbi_taxonomy`
+  - `amp_fa`: `results/<taxon>/msa/<hog_id>.amp.fa`
+- **[解決策]**:
+  1. `run_ampliphy.sh` の `ampliphy`、`ampliphy-analysis`、`DB_DIR` 設定から探索ループを全削除し、上記確定パスへ直接設定。
+  2. `run_gs_pipeline.sh` の `GS2_BIN`、`MAD_SCRIPT`、`TCS_SCRIPT`、`DATASET_DIR` および `amp_fa` 探索ループを全削除し確定パスに一本化。
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取り込み (`git pull`)
+2. ジョブ投入: `bsub < scripts/run_ampliphy.sh`
+3. リアルタイムログで進捗監視:
+   - 全体ログ: `tail -f logs/ampliphy/ampliphy_*.log`
+   - 各生物種コンソール: `tail -f logs/ampliphy/nextflow_*.console.log`
+   - LSF ジョブ分散状況: `bjobs`
+
+---
+
+最終更新: 2026-10-27 02:28
+
+## 📈 進捗状況
+- [x] 完了: `cluster_dynamic.config` の外部静的ファイル化 ([configs/cluster_dynamic.config](file:///Users/aibarakazuki/Ampliphy2/configs/cluster_dynamic.config)) と Git 管理化 (完了日: 10/27)
+- [x] 完了: taxonomy (.tax) ディレクトリの準備と TCS 評価の常時実行化 (完了日: 10/27)
+- [ ] 進行中: スパコン上での AmpliPhy クラスタ全体分散実行 (進捗率: 45% / 課題: ジョブ投入と進捗監視)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: 
+  1. `run_ampliphy.sh` 内で毎回ヒアドキュメント (`cat << 'EOF' > ...`) を用いて Nextflow 設定ファイルを生成するのではなく、設定ファイルとして独立させて Git 管理したい。
+  2. taxonomy (.tax) の準備が条件分岐ではなく、常に実行されて TCS 評価・系統樹評価が確実に行われるようにしたい。
+- **[解決策]**:
+  1. `configs/cluster_dynamic.config` を静的設定ファイルとして独立作成し、Git 追跡対象に設定（`.gitignore` から `configs/` を除外）。
+  2. `run_ampliphy.sh` からインラインの Nextflow 設定生成コードを完全撤廃し、`CONFIG_FILE="$CONFIG_DIR/cluster_dynamic.config"` を参照するシンプルな構成に変更。
+  3. `taxonomy/$taxon`（全400件の `.tax` ファイル）はすでに Git 追跡対象としてリポジトリに揃っているため、動的生成コード（Python）を全削除し、直接ファイル存在確認のみを行う構成に単純化。
+- **[パラメータ]**: Nextflow Config: `configs/cluster_dynamic.config`, Taxonomy: `--input_taxonomy taxonomy/<taxon>` (常時有効)
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取り込み (`git pull`)
+2. ジョブ投入: `bsub < scripts/run_ampliphy.sh`
+3. リアルタイムログで進捗監視:
+   - 全体ログ: `tail -f logs/ampliphy/ampliphy_*.log`
+   - 各生物種コンソール: `tail -f logs/ampliphy/nextflow_*.console.log`
+   - LSF ジョブ分散状況: `bjobs`
+
+---
+
+最終更新: 2026-10-27 02:26
+
+## 📈 進捗状況
+- [x] 完了: `run_ampliphy.sh` および `run_gs_pipeline.sh` の探索ループを全撤廃し、`/home/citrusml2004/Ampliphy2` 配下の確定パスに固定・単純化 (完了日: 10/27)
+- [x] 完了: `run_ampliphy.sh` にて `--input_taxonomy` を指定し、元MSAと増幅後MSAの TCS スコア評価レポート (`amplified_tcs_report.tsv`) 算出を常時有効化 (完了日: 10/27)
+- [ ] 進行中: AmpliPhy ジョブ投入と進捗確認 (進捗率: 45% / 課題: スパコン上での再投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**:
+  1. `input_fasta` や `taxonomy`、`ampliphy` 関連ディレクトリの位置が確定しているにもかかわらず、過去のフォールバック用ループ探索コードが多数残っており冗長になっていた。
+  2. taxonomy データ（100件/.tax）がすでに準備完了しているため、AmpliPhy パイプライン内で元ツリーと増幅後ツリーの TCS スコア評価（`amplified_tcs_report.tsv`）まで一貫して実行したい。
+- **[解決策]**:
+  1. `run_ampliphy.sh`:
+     - `input_dir` を `$AMPLIPHY_ROOT/input_fasta/$taxon` に完全固定（探索ループ削除）。
+     - `tax_dir` を `$AMPLIPHY_ROOT/taxonomy/$taxon` に完全固定（探索ループ・動的生成処理を削除）。
+     - `AMPLIPHY_DIR`、`DATASET_DIR`、`CONFIG_DIR`、`NCBI_DIR` をすべて `$AMPLIPHY_ROOT` 直下に一本化。
+     - Nextflow 実行引数に `--input_taxonomy "$tax_dir"` および `--ncbi_dir "$NCBI_DIR"` を指定し、TCS 算出（`amplified_tcs.nf`）を常時実行。
+     - 並行実行時の競合を防ぐため、UniRef50 と NCBI taxonomy の事前準備ブロックを配置。
+  2. `run_gs_pipeline.sh`:
+     - `orig_dir` (`$AMPLIPHY_ROOT/input_fasta/$taxon`)、`amp_dir` (`$AMPLIPHY_ROOT/results/$taxon/msa`)、`DATASET_DIR` の探索ループを全撤廃し確定パスに固定。
+- **[パラメータ]**:
+  - `input_dir`: `Ampliphy2/input_fasta/<taxon>`
+  - `tax_dir`: `Ampliphy2/taxonomy/<taxon>`
+  - `CONFIG_FILE`: `Ampliphy2/configs/cluster_dynamic.config`
+  - 出力: `results/<taxon>/report/amplified_tcs_report.tsv` (family_id, tcs_ori, tcs_amp)
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取り込み (`git pull`)
+2. ジョブ投入: `bsub < scripts/run_ampliphy.sh`
+3. ログのリアルタイム確認:
+   - 全体: `tail -f logs/ampliphy/ampliphy_*.log`
+   - 各生物種コンソール: `tail -f logs/ampliphy/nextflow_*.console.log`
+
+---
+
+最終更新: 2026-10-27 02:20
+
+## 📈 進捗状況
+- [x] 完了: `cluster_dynamic.config: No such file or directory` エラーの原因特定と自動シンボリックリンク＆設定保存先修正 (完了日: 10/27)
+- [ ] 進行中: AmpliPhy ジョブ再投入とクラスタ全体分散実行の監視 (進捗率: 40% / 課題: スパコン上での再投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: スパコン上で `run_ampliphy.sh` 実行時、`/home/citrusml2004/.lsbatch/1793034537.246034.shell: line 140: /home/citrusml2004/Ampliphy2/ampliphy/cluster_dynamic.config: No such file or directory` というエラーで停止した。
+- **[原因]**:
+  1. `.gitignore` に `ampliphy*` が指定されているため、Git から clone/pull した `Ampliphy2` 直下には `ampliphy/` ディレクトリが存在しない。
+  2. スパコン上では `ampliphy` は `$HOME/ampliphy` (または `/lustre10/home/citrusml2004/ampliphy`) に別途 clone されていた。
+  3. スクリプトが `$AMPLIPHY_ROOT/ampliphy/cluster_dynamic.config` へ直接ファイルを生成しようとしたため、親ディレクトリが存在せず書き込みエラーとなった。
+- **[解決策]**:
+  1. `run_ampliphy.sh` および `run_gs_pipeline.sh` の冒頭に、クラスタ上の `ampliphy` および `ampliphy-analysis` を自動検出し、`$AMPLIPHY_ROOT/ampliphy` / `$AMPLIPHY_ROOT/ampliphy-analysis` へシンボリックリンクを自動作成する処理を追加。
+  2. 動的生成する Nextflow 設定ファイルの保存先を `$AMPLIPHY_ROOT/configs/cluster_dynamic.config` に変更し、事前に `mkdir -p "$AMPLIPHY_ROOT/configs"` を実行して確実に配置できるようにした。
+  3. `configs/`、`results/`、`logs/`、`mmseqs_db/`、`.nextflow/` を `.gitignore` に追加し、生成物が Git を汚染しないよう保護。
+- **[パラメータ]**: CONFIG_FILE: `Ampliphy2/configs/cluster_dynamic.config`, PATH: `$HOME/Ampliphy2/ampliphy/bin:$HOME/ampliphy/bin:$PATH`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取り込み (`git pull`)
+2. ジョブ投入: `bsub < scripts/run_ampliphy.sh`
+3. リアルタイムログで進捗監視:
+   - 全体ログ: `tail -f logs/ampliphy/ampliphy_*.log`
+   - 各生物種コンソール: `tail -f logs/ampliphy/nextflow_*.console.log`
+   - LSF ジョブ分散状況: `bjobs`
+
+---
+
+最終更新: 2026-10-27 02:17
+
+## 📈 進捗状況
+- [x] 完了: `run_ampliphy.sh` から単一ノード内実行モードの分岐を撤廃し、常時クラスタ全体動的分散実行へ完全統一 (完了日: 10/27)
+- [ ] 進行中: AmpliPhy ジョブ投入とクラスタ全体分散実行の監視 (進捗率: 35% / 課題: スパコン上での再投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: `run_ampliphy.sh` 内に存在した「クラスタ全体分散モード」と「単一ノード内実行モード」の条件分岐（`MODE="cluster"` / `MODE="local"`）をなくし、常にクラスタ全体へタスクを動的ディスパッチする構成に一本化したい。
+- **[解決策]**:
+  1. `MODE` 環境変数および単一ノード用設定（`THREADS=40`, `MAX_MEM="200 GB"`, `local_resource_limit.config`）を完全に削除。
+  2. Nextflow 設定ファイル生成部分で無条件に `cluster_dynamic.config`（`executor = 'lsf'`, queueSize 150）を生成するように簡素化。
+  3. メインループ部でもモード分岐を取り払い、複数生物種指定時はバックグラウンド並行投入、単一生物種時は単独実行とするシンプルなフローに整理。
+- **[パラメータ]**: executor: `lsf`, queueSize: 150, 各ラベル設定: mmseqs(8cpus, 16GB), tree(4cpus, 16GB), short(4cpus, 8GB), minimal(1cpu, 4GB)
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを反映
+2. ジョブ投入: `bsub < scripts/run_ampliphy.sh`
+3. クラスタ全体へのタスク分散状況を確認: `bjobs` および `tail -f logs/ampliphy/*.console.log`
+
+---
+
 最終更新: 2026-10-27 02:07
 
 ## 📈 進捗状況
