@@ -1,3 +1,26 @@
+最終更新: 2026-10-27 03:20
+
+## 📈 進捗状況
+- [x] 完了: 元の系統樹 (*.ori.nwk) の出力設定 (publishDir) の追加および Nextflow 複数ラウンド進捗表示仕様の確認・実証 (完了日: 10/27)
+- [ ] 進行中: AmpliPhy ジョブ実行と増幅後系統樹 (*.amp.nwk)・TCS レポート生成の確認 (進捗率: 75% / 課題: mmseqs_search 実行中)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: 
+  1. `results/<taxon>/tree/` に元の系統樹 (`*.ori.nwk`) が保存されず、増幅後系統樹 (`*.amp.nwk`) しか出力されない。
+  2. Nextflow の進捗ログで `iqtree_inference` が 1周目 (ori: 100件) で `99 of 100` と表示されているが、2周目 (amp: 100件) の進捗が正しく表示されるのかの懸念。
+- **[解決策]**:
+  1. **元ツリーの自動出力**: `configs/cluster_dynamic.config` および `ampliphy/modules/iqtree_inference.nf` の `publishDir` 設定において、`filename.endsWith('.ori.nwk')` を許可するよう更新。これにより、元の系統樹も自動的に `results/<taxon>/tree/<id>.ori.nwk` として永続保存される。
+  2. **進捗表示の動作検証**: Nextflow のチャンネルキュー（DAG）仕様および手元テストにより、`mafft_amplify` 完了後に 2周目のデータが流れてくると、Nextflow が自動的に分母を動的拡張（`100 of 100` → `100 of 200` → `200 of 200`）して 2周目も含めてリアルタイムに進捗描画されることを確認。
+- **[パラメータ]**: `publishDir` (`saveAs`: `ori.nwk` は常にコピー、`amp.unpruned.nwk` はオプション)
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新設定を取り込み (`git pull`)
+2. 現在走行中のジョブから元系統樹を今すぐ取り出したい場合:
+   - `cp results/actinomycete/work/*/*/*.ori.nwk results/actinomycete/tree/ 2>/dev/null || true`
+3. ジョブの完了（`mmseqs_search` → `mafft_amplify` → `iqtree_inference` 2周目 → `amplified_tcs`）を待機・確認
+
+---
+
 最終更新: 2026-10-27 03:08
 
 ## 📈 進捗状況
