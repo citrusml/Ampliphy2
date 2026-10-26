@@ -20,7 +20,7 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 # 1. パスとディレクトリの設定
 # ------------------------------------------------------------------------------
-WORK_DIR="${WORK_DIR:-$HOME}"
+WORK_DIR="${WORK_DIR:-$HOME/Ampliphy2}"
 
 # 入力ディレクトリ
 # 1) オリジナルHOG配列 (FASTA)
@@ -42,9 +42,10 @@ GS2_BIN="${GS2_BIN:-$WORK_DIR/gs/gs2}"
 MAD_SCRIPT="${MAD_SCRIPT:-$WORK_DIR/tools/mad2.2/mad/mad.py}"
 TCS_SCRIPT="${TCS_SCRIPT:-$WORK_DIR/ampliphy-analysis/scripts/tcs_batch.py}"
 LINEAGE_TSV="${LINEAGE_TSV:-$WORK_DIR/ampliphy-analysis/dataset/euk_lineage.tsv}"
-PY_MODULE_DIR="${PY_MODULE_DIR:-$PWD}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY_MODULE_DIR="${PY_MODULE_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
-THREADS=16
+THREADS=8
 MMSEQS_SENS=7.5
 
 echo "=============================================================================="
