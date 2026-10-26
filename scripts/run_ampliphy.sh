@@ -178,8 +178,7 @@ run_taxon() {
     local output_dir="$AMPLIPHY_ROOT/results/$taxon"
     local work_dir="$output_dir/work"
     local launch_dir="$output_dir/launch"   # 生物種ごとに独立した起動ディレクトリ (.nextflow/ の競合防止)
-    local log_file="$AMPLIPHY_ROOT/logs/ampliphy/nextflow_${taxon}.log"
-    local console_log="$AMPLIPHY_ROOT/logs/ampliphy/nextflow_${taxon}.console.log" # 進捗表示 (tail -f 用)
+    local nxf_log="$AMPLIPHY_ROOT/logs/ampliphy/nextflow_${taxon}.log" # 進捗ログ (tail -f で確認可)
     mkdir -p "$output_dir" "$work_dir" "$launch_dir"
 
     echo "  INPUT_DIR:   $input_dir"
@@ -188,17 +187,17 @@ run_taxon() {
     echo "  WORK_DIR:    $work_dir"
     echo "  DB_DIR:      $DB_DIR"
     echo "  NCBI_DIR:    $NCBI_DIR"
-    echo "  CONSOLE_LOG: $console_log  (tail -f で確認可)"
+    echo "  LOG_FILE:    $nxf_log  (tail -f で進捗確認可)"
 
     cd "$launch_dir"
     export NXF_OPTS="${NXF_OPTS:--Xms512m -Xmx4g}"
 
     # Nextflow 実行:
+    # -ansi-log false は指定せず、Nextflow 標準のリアルタイム進捗ブロックを直接ログへストリーミング出力
     # --input_taxonomy を指定することで、homolog_taxonomy, amplified_taxonomy,
     # input_lineage, amplified_tcs が自動実行され amplified_tcs_report.tsv が生成されます。
     # shellcheck disable=SC2086
-    nextflow -log "$log_file" run "$AMPLIPHY_DIR/ampliphy.nf" \
-        -ansi-log false \
+    nextflow run "$AMPLIPHY_DIR/ampliphy.nf" \
         -work-dir "$work_dir" \
         -c "$CONFIG_FILE" \
         --input_dir "$input_dir" \
@@ -212,7 +211,7 @@ run_taxon() {
         --mafft_preset auto \
         --mad_script "$AMPLIPHY_DIR/bin/mad.py" \
         --tcs_script "$AMPLIPHY_DIR/bin/tcs.py" \
-        -resume > "$console_log" 2>&1
+        -resume > "$nxf_log" 2>&1
 
     echo "AmpliPhy 完了: $taxon"
     echo "  -> 増幅後MSA: $output_dir/msa/*.amp.fa"

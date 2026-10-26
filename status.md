@@ -1,3 +1,30 @@
+最終更新: 2026-10-27 03:08
+
+## 📈 進捗状況
+- [x] 完了: Phylomethod_comparison との比較によるログ非同期・非表示原因の特定と `-ansi-log false` 削除による標準進捗表示の復元 (完了日: 10/27)
+- [ ] 進行中: AmpliPhy ジョブ再投入とリアルタイム進捗ログの確認 (進捗率: 70% / 課題: スパコン上での再投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: スパコン上でジョブ実行中、ログで進捗状況（各ステップの進行率）が随時確認できない。外部集計スクリプトなしで `~/Phylomethod_comparison` と同様に Nextflow 標準のログで随時進捗を確認したい。
+- **[原因 (Phylomethod_comparison との差分)]**:
+  1. **`-ansi-log false` の混入**: `scripts/run_ampliphy.sh` に `-ansi-log false` が指定されていたため、Nextflow 標準の動的進捗ブロック（`[xx%] x of y` など）の出力が完全に抑制されていた（※過去の `~/Phylomethod_comparison/memo/edit20260815.md` でも同一原因で `-ansi-log false` を削除していた経緯と完全一致）。
+  2. **ログ分離と名称**: Nextflow の標準出力を `nextflow_<taxon>.console.log` に逃がし、`nextflow_<taxon>.log` には Java 内部デバッグログを出力していたため、ユーザーが確認すべきログの動線が乱れていた。また、4生物種を並列実行するためマスターログ（`master_*.out`）には各プロセスの標準出力が直接流れていなかった。
+- **[解決策]**:
+  1. 外部集計スクリプトや監視ツールは一切使わず、Nextflow ネイティブの進捗表示に一本化（余計なファイルは不要）。
+  2. `scripts/run_ampliphy.sh` から `-ansi-log false` を削除。
+  3. 各生物種の実行進捗ログを `logs/ampliphy/nextflow_<taxon>.log` に直接ストリーミング出力するように整理。
+- **[パラメータ]**: `nextflow run ... > logs/ampliphy/nextflow_<taxon>.log 2>&1` (標準進捗ブロック有効)
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取り込み (`git pull`)
+2. 前回のジョブが残っていれば停止 (`bjobs` で確認後 `bkill <JOB_ID>`)
+3. ジョブ再投入: `bsub < scripts/run_ampliphy.sh`
+4. リアルタイム進捗の確認:
+   - 例: `tail -f logs/ampliphy/nextflow_amniota.log`
+   - 例: `tail -f logs/ampliphy/nextflow_eukaryota.log`
+
+---
+
 最終更新: 2026-10-27 02:47
 
 ## 📈 進捗状況
