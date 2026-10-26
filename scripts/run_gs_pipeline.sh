@@ -11,8 +11,8 @@
 # ==============================================================================
 
 #BSUB -J gs_tcs_multi_taxa
-#BSUB -n 16
-#BSUB -R "span[hosts=1]"
+#BSUB -n 40
+#BSUB -R "select[ncpus>=48] span[hosts=1]"
 #BSUB -W 24:00
 #BSUB -o Ampliphy2/logs/gs/gs_pipeline_%J.out
 #BSUB -e Ampliphy2/logs/gs/gs_pipeline_%J.err
@@ -32,7 +32,8 @@ MAD_SCRIPT="${MAD_SCRIPT:-$WORK_DIR/tools/mad2.2/mad/mad.py}"
 TCS_SCRIPT="${TCS_SCRIPT:-$WORK_DIR/ampliphy-analysis/scripts/tcs_batch.py}"
 DATASET_DIR="${DATASET_DIR:-$PY_MODULE_DIR/ampliphy-analysis/dataset}"
 
-THREADS=16
+# 48コア計算ノード (mafftsrv1~5) 向けに 40 スレッドを設定
+THREADS=40
 MMSEQS_SENS=7.5
 
 # 実行対象生物種 (引数があればそれを採用、なければ4種すべて)
