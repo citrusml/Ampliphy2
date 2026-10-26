@@ -418,3 +418,72 @@ def summarize_gs_results(df: pd.DataFrame) -> Dict[str, Union[float, int]]:
         "pct_improved": pct_imp,
         "wilcoxon_pvalue": pval,
     }
+
+
+def generate_lineage_tsv(
+    taxa_tsv: Union[str, Path],
+    fasta_files: List[Union[str, Path]],
+    output_tsv: Union[str, Path],
+    species_code_len: int = 5,
+) -> int:
+    """Generate a lineage TSV mapping query ID to lineage using species taxonomy metadata.
+
+    Parameters
+    ----------
+    taxa_tsv : Union[str, Path]
+        Path to the species taxonomy metadata TSV file (e.g. euk_taxa.tsv). (unitless)
+    fasta_files : List[Union[str, Path]]
+        List of paths to FASTA files to extract sequence query IDs from. (unitless)
+    output_tsv : Union[str, Path]
+        Path to the output lineage TSV file. (unitless)
+    species_code_len : int, optional
+        Length of the UniProt species mnemonic code prefix, by default 5. (count)
+
+    Returns
+    -------
+    int
+        Total number of unique query-to-lineage mappings written. (count)
+
+    Raises
+    ------
+    FileNotFoundError
+        If taxa_tsv does not exist.
+    """
+    taxa_path = Path(taxa_tsv)
+    out_path = Path(output_tsv)
+
+    if not taxa_path.exists():
+        raise FileNotFoundError(f"Taxa metadata file not found: {taxa_path}")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Read mapping: 5-letter species code -> lineage string
+    taxa_map: Dict[str, str] = {}
+    with open(taxa_path, "r", encoding="utf-8") as f:
+        for line in f:
+            parts = line.strip().split("\t")
+            if len(parts) >= 3:
+                taxa_map[parts[0].strip()] = parts[2].strip()
+
+    written: int = 0
+    seen_queries: Set[str] = set()
+
+    with open(out_path, "w", encoding="utf-8") as out_f:
+        out_f.write("query\tlineage\n")
+        for fasta_file in fasta_files:
+            p = Path(fasta_file)
+            if not p.exists():
+                continue
+            with open(p, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith(">"):
+                        query = line[1:].strip().split()[0]
+                        if query in seen_queries:
+                            continue
+                        seen_queries.add(query)
+                        sp_code = query[:species_code_len]
+                        if sp_code in taxa_map:
+                            out_f.write(f"{query}\t{taxa_map[sp_code]}\n")
+                            written += 1
+
+    return written
