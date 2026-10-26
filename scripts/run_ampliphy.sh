@@ -18,26 +18,37 @@
 #BSUB -n 2
 #BSUB -R "span[hosts=1]"
 #BSUB -W 72:00
+#BSUB -cwd /home/citrusml2004/Ampliphy2
 #BSUB -o logs/ampliphy/master_%J.out
 #BSUB -e logs/ampliphy/master_%J.err
 
 set -euo pipefail
 
 # ------------------------------------------------------------------------------
-# 1. パスとディレクトリの設定
+# 1. パスとディレクトリの設定 (すべて /home/citrusml2004/Ampliphy2 配下に完全統一)
 # ------------------------------------------------------------------------------
-WORK_DIR="${WORK_DIR:-$HOME}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AMPLIPHY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [ -d "/home/citrusml2004/Ampliphy2" ]; then
+    AMPLIPHY_ROOT="/home/citrusml2004/Ampliphy2"
+elif [ -d "$HOME/Ampliphy2" ]; then
+    AMPLIPHY_ROOT="$HOME/Ampliphy2"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    AMPLIPHY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
+# スパコン上での実行カレントディレクトリを確実に Ampliphy2 に設定
+cd "$AMPLIPHY_ROOT"
+WORK_DIR="$AMPLIPHY_ROOT"
+
 AMPLIPHY_DIR="$AMPLIPHY_ROOT/ampliphy"
 DATASET_DIR="$AMPLIPHY_ROOT/ampliphy-analysis/dataset"
 
-# MMseqs2 データベースの保存先 (大容量ディスク領域)
-DB_DIR="${DB_DIR:-$WORK_DIR/mmseqs_db}"
-if [ -d "$WORK_DIR/Ampliphy2/mmseqs_db" ]; then
-    DB_DIR="$WORK_DIR/Ampliphy2/mmseqs_db"
+# MMseqs2 データベースの保存先 (Ampliphy2/mmseqs_db または既存の mmseqs_db)
+DB_DIR="$AMPLIPHY_ROOT/mmseqs_db"
+if [ ! -d "$DB_DIR" ] && [ -d "$HOME/mmseqs_db" ]; then
+    DB_DIR="$HOME/mmseqs_db"
 fi
-mkdir -p "$DB_DIR" "$AMPLIPHY_ROOT/logs/ampliphy"
+mkdir -p "$DB_DIR" "$AMPLIPHY_ROOT/logs/ampliphy" "$AMPLIPHY_ROOT/results"
 
 # ------------------------------------------------------------------------------
 # リアルタイムログ出力設定 (LSFの完了バッファリングを回避し、即座にディスクへ出力)

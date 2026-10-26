@@ -14,25 +14,35 @@
 #BSUB -n 8
 #BSUB -R "span[hosts=1]"
 #BSUB -W 12:00
+#BSUB -cwd /home/citrusml2004/Ampliphy2
 #BSUB -o logs/gs/gs_%J_%I.out
 #BSUB -e logs/gs/gs_%J_%I.err
 
 set -euo pipefail
 
 # ------------------------------------------------------------------------------
-# 1. 基本パスとツールの設定
+# 1. 基本パスとツールの設定 (すべて /home/citrusml2004/Ampliphy2 配下に完全統一)
 # ------------------------------------------------------------------------------
-WORK_DIR="${WORK_DIR:-$HOME}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PY_MODULE_DIR="${PY_MODULE_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+if [ -d "/home/citrusml2004/Ampliphy2" ]; then
+    AMPLIPHY_ROOT="/home/citrusml2004/Ampliphy2"
+elif [ -d "$HOME/Ampliphy2" ]; then
+    AMPLIPHY_ROOT="$HOME/Ampliphy2"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    AMPLIPHY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 
-mkdir -p "$PY_MODULE_DIR/logs/gs"
+cd "$AMPLIPHY_ROOT"
+WORK_DIR="$AMPLIPHY_ROOT"
+PY_MODULE_DIR="$AMPLIPHY_ROOT"
+
+mkdir -p "$AMPLIPHY_ROOT/logs/gs" "$AMPLIPHY_ROOT/results_gs"
 
 # 外部ツール・スクリプトのパス
-GS2_BIN="${GS2_BIN:-$WORK_DIR/gs/gs2}"
-MAD_SCRIPT="${MAD_SCRIPT:-$WORK_DIR/tools/mad2.2/mad/mad.py}"
-TCS_SCRIPT="${TCS_SCRIPT:-$WORK_DIR/ampliphy-analysis/scripts/tcs_batch.py}"
-DATASET_DIR="${DATASET_DIR:-$PY_MODULE_DIR/ampliphy-analysis/dataset}"
+GS2_BIN="${GS2_BIN:-$HOME/gs/gs2}"
+MAD_SCRIPT="${MAD_SCRIPT:-$HOME/tools/mad2.2/mad/mad.py}"
+TCS_SCRIPT="${TCS_SCRIPT:-$AMPLIPHY_ROOT/ampliphy-analysis/scripts/tcs_batch.py}"
+DATASET_DIR="${DATASET_DIR:-$AMPLIPHY_ROOT/ampliphy-analysis/dataset}"
 
 # スレッド数 (LSF -n 8 割当にあわせてデフォルト 8 スレッド)
 # 8コア要求のため、クラスタ内 (mafftsrv0〜5, mafftweb) の空きコアへ即座に充填されます

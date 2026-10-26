@@ -1,3 +1,25 @@
+最終更新: 2026-10-27 02:07
+
+## 📈 進捗状況
+- [x] 完了: スパコン上の全実行・成果物・ログの配置先を `/home/citrusml2004/Ampliphy2` に完全統一 (完了日: 10/27)
+- [x] 完了: LSF ディレクティブに `#BSUB -cwd /home/citrusml2004/Ampliphy2` を追加し、起動場所依存のズレを解消 (完了日: 10/27)
+- [ ] 進行中: AmpliPhy ジョブ投入と進捗確認 (進捗率: 30% / 課題: スパコン上での再投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: スパコン上でジョブを実行した際、ホームディレクトリ直下（`/home/citrusml2004/results` や `/home/citrusml2004/logs`）にフォルダが作成されてしまっていた。すべて `/home/citrusml2004/Ampliphy2` 配下に完結させたい。
+- **[解決策]**:
+  1. `run_ampliphy.sh` および `run_gs_pipeline.sh` に `#BSUB -cwd /home/citrusml2004/Ampliphy2` を明示指定。どのディレクトリから `bsub` を実行しても必ず `Ampliphy2` 内が作業ディレクトリになるよう保証。
+  2. スクリプト冒頭で `AMPLIPHY_ROOT="/home/citrusml2004/Ampliphy2"` を設定し、`cd "$AMPLIPHY_ROOT"` を実行。
+  3. `results` (`results/<taxon>`)、`logs` (`logs/ampliphy`, `logs/gs`)、`results_gs` (`results_gs/<taxon>`) をすべて `Ampliphy2` 直下に生成するようパスを完全固定。
+- **[パラメータ]**: カレントディレクトリ: `/home/citrusml2004/Ampliphy2`, 出力先: `Ampliphy2/results`, ログ: `Ampliphy2/logs`
+
+## 🚀 次に行うこと (Next Actions)
+1. ホーム直下に誤って作られた不要フォルダがあれば削除: `rm -rf ~/results ~/logs`
+2. 最新コードを反映後、ジョブ投入: `bsub < scripts/run_ampliphy.sh`
+3. ログのリアルタイム確認: `tail -f logs/ampliphy/ampliphy_live_*.log` または `tail -f logs/ampliphy/*.console.log`
+
+---
+
 最終更新: 2026-10-27 02:00
 
 ## 📈 進捗状況
