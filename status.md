@@ -1,3 +1,33 @@
+最終更新: 2026-10-27 02:47
+
+## 📈 進捗状況
+- [x] 完了: `input_lineage` の rank 'subspecies' エラー解消（全399件の `.tax` ファイルの種レベル TaxId 化 ＆ `ampliphy` 側の種ランク自動解決フォールバック実装） (完了日: 10/27)
+- [ ] 進行中: AmpliPhy ジョブ再投入と TCS 算出完了の確認 (進捗率: 60% / 課題: スパコン上での再投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: Nextflow の `input_lineage` タスク実行時、以下のエラーが発生した：
+  ```
+  Command error:
+    Error: E0732656.tax:4: TaxId '9595' resolves to rank 'subspecies', not species.
+  ```
+- **[原因]**:
+  1. `ampliphy_input_lineage.py` は配列に割り当てられた TaxId が厳密に `rank == "species"` であることを要求している。
+  2. しかし、元データ（`dataset/*_taxa.tsv` の第2列）には leaf レベルの TaxId（亜種や株、例: ゴリラ亜種 `9595` やイヌ亜種 `9615` など）が登録されていたため、`.tax` ファイルにも亜種 TaxId が引き継がれ、種ランク不一致で失敗していた。
+- **[解決策]**:
+  1. **`.tax` ファイルの種レベル TaxId への一括更新:** `dataset/*_taxa.tsv` の系統情報から正確な種レベルの TaxId（例: ゴリラ種 `9593`, イヌ種 `9612` など）を抽出し、`taxonomy/*/*.tax` の全4,752箇所の亜種・株 TaxId を正規の種 TaxId に一括置換。
+  2. **`ampliphy` 側の自動解決フォールバック:** 万が一亜種・株レベルの TaxId が渡された場合でも、NCBI 系統樹の親ノードを遡って自動的に `rank == "species"` のノードを解決するよう `ampliphy_input_lineage.py` および `ampliphy_amplified_taxonomy.py` を改修。
+- **[パラメータ]**: `taxonomy/<taxon>/*.tax` (全400ファイル中399ファイルの4,752エントリを種レベルTaxIdへ正規化)
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取り込み (`git pull`)
+2. ジョブ再投入: `bsub < scripts/run_ampliphy.sh`
+3. リアルタイムログで進捗監視:
+   - 全体ログ: `tail -f logs/ampliphy/ampliphy_*.log`
+   - 各生物種コンソール: `tail -f logs/ampliphy/nextflow_*.console.log`
+   - LSF ジョブ分散状況: `bjobs`
+
+---
+
 最終更新: 2026-10-27 02:40
 
 ## 📈 進捗状況
