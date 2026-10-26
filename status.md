@@ -1,3 +1,29 @@
+最終更新: 2026-10-27 02:40
+
+## 📈 進捗状況
+- [x] 完了: Nextflow LSF投入エラー (`Syntax Error: Multiple -R resource requirement strings...`) の原因特定と `clusterOptions` 削除 (完了日: 10/27)
+- [ ] 進行中: AmpliPhy ジョブ再投入と各タスクのLSFディスパッチ確認 (進捗率: 55% / 課題: スパコン上での再投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: スパコン上で AmpliPhy 実行時、マスタージョブ (246037) は起動したが、個別タスク投入時に LSF がエラーコード 255 を返して停止した：
+  ```
+  Syntax Error: Multiple -R resource requirement strings are not supported on "span", "cu" and "affinity" sections. Specify multiple -R resource requirement strings only on order, same, rusage, and select sections.
+  Bad resource requirement syntax. Job not submitted.
+  ```
+- **[原因]**: Nextflow の LSF エグゼキュータは、`cpus` や `memory` 設定に基づいて自動的に `-R "span[hosts=1] ..."` を構築して `bsub` コマンドに付与する。これに対し、`configs/cluster_dynamic.config` で `clusterOptions = '-R "span[hosts=1]"'` を手動指定していたため、`bsub` コマンドに `-R` の `span` セクションが重複して渡され、LSF の構文エラーとなっていた。
+- **[解決策]**: `configs/cluster_dynamic.config` から重複する `clusterOptions = '-R "span[hosts=1]"'` を削除。Nextflow ネイティブの LSF リソース構築処理に委ねることで、単一かつ正常な `-R` オプションが渡されるように修正。
+- **[パラメータ]**: `configs/cluster_dynamic.config` (executor: `lsf`, queue: `mafft`, cpus/memory による自動リソース生成)
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取り込み (`git pull`)
+2. ジョブ再投入: `bsub < scripts/run_ampliphy.sh`
+3. リアルタイムログで進捗監視:
+   - 全体ログ: `tail -f logs/ampliphy/ampliphy_*.log`
+   - 各生物種コンソール: `tail -f logs/ampliphy/nextflow_*.console.log`
+   - LSF ジョブ分散状況: `bjobs`
+
+---
+
 最終更新: 2026-10-27 02:35
 
 ## 📈 進捗状況
