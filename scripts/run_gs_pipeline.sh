@@ -10,12 +10,12 @@
 #   bash scripts/run_gs_pipeline.sh eukaryota amniota
 # ==============================================================================
 
-#BSUB -J gs_tcs_multi_taxa
-#BSUB -n 40
-#BSUB -R "select[ncpus>=48] span[hosts=1]"
-#BSUB -W 24:00
-#BSUB -o Ampliphy2/logs/gs/gs_pipeline_%J.out
-#BSUB -e Ampliphy2/logs/gs/gs_pipeline_%J.err
+#BSUB -J "gs_pipeline[1-4]"
+#BSUB -n 8
+#BSUB -R "span[hosts=1]"
+#BSUB -W 12:00
+#BSUB -o logs/gs/gs_%J_%I.out
+#BSUB -e logs/gs/gs_%J_%I.err
 
 set -euo pipefail
 
@@ -26,27 +26,40 @@ WORK_DIR="${WORK_DIR:-$HOME}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PY_MODULE_DIR="${PY_MODULE_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
+mkdir -p "$PY_MODULE_DIR/logs/gs"
+
 # 外部ツール・スクリプトのパス
 GS2_BIN="${GS2_BIN:-$WORK_DIR/gs/gs2}"
 MAD_SCRIPT="${MAD_SCRIPT:-$WORK_DIR/tools/mad2.2/mad/mad.py}"
 TCS_SCRIPT="${TCS_SCRIPT:-$WORK_DIR/ampliphy-analysis/scripts/tcs_batch.py}"
 DATASET_DIR="${DATASET_DIR:-$PY_MODULE_DIR/ampliphy-analysis/dataset}"
 
-# 48コア計算ノード (mafftsrv1~5) 向けに 40 スレッドを設定
-THREADS=40
+# スレッド数 (LSF -n 8 割当にあわせてデフォルト 8 スレッド)
+# 8コア要求のため、クラスタ内 (mafftsrv0〜5, mafftweb) の空きコアへ即座に充填されます
+THREADS="${THREADS:-8}"
 MMSEQS_SENS=7.5
 
-# 実行対象生物種 (引数があればそれを採用、なければ4種すべて)
+# 全4生物種の定義
+ALL_TAXA=("eukaryota" "amniota" "bacteria" "actinomycete")
+
+# 実行対象生物種の決定 (LSF Job Array / CLI引数 / 全種一括に対応)
 if [ "$#" -gt 0 ]; then
+    # 手動指定時 (例: bash scripts/run_gs_pipeline.sh bacteria)
     TARGET_TAXA=("$@")
+elif [ -n "${LSB_JOBINDEX:-}" ] && [ "$LSB_JOBINDEX" -ge 1 ] && [ "$LSB_JOBINDEX" -le "${#ALL_TAXA[@]}" ]; then
+    # LSF ジョブ配列投入時 (bsub < scripts/run_gs_pipeline.sh)
+    # 4台の空きサーバーへ1生物種ずつ自動分配
+    TARGET_TAXA=("${ALL_TAXA[$((LSB_JOBINDEX - 1))]}")
 else
-    TARGET_TAXA=("eukaryota" "amniota" "bacteria" "actinomycete")
+    # 非LSF対話的実行時 (全種順番に実行)
+    TARGET_TAXA=("${ALL_TAXA[@]}")
 fi
 
 echo "=============================================================================="
 echo "GS Method (gs2) Multi-Taxa TCS Evaluation Pipeline"
-echo "Started at: $(date)"
-echo "Host: $(hostname)"
+echo "Started at:    $(date)"
+echo "Host:          $(hostname)"
+echo "Allocated CPUs:$THREADS"
 echo "WORK_DIR:      $WORK_DIR"
 echo "PY_MODULE_DIR: $PY_MODULE_DIR"
 echo "GS2 Binary:    $GS2_BIN"
@@ -106,13 +119,13 @@ process_taxon() {
     echo "# 生物種グループ開始: $taxon ($short_name)"
     echo "##############################################################################"
 
-    # 入力ディレクトリの自動探索
+    # 入力ディレクトリの自動探索 (Ampliphy2/input_fasta/<taxon> を最優先)
     local orig_dir=""
     for cand in \
+        "$PY_MODULE_DIR/input_fasta/$taxon" \
         "$WORK_DIR/Ampliphy2/input_fasta/$taxon" \
         "$WORK_DIR/input_fasta/$taxon" \
-        "$WORK_DIR/archive/input_fasta/$taxon" \
-        "$WORK_DIR/input_fasta/${taxon}_new"; do
+        "$WORK_DIR/archive/input_fasta/$taxon"; do
         if [ -d "$cand" ] && compgen -G "$cand/*.fa" > /dev/null; then
             orig_dir="$cand"
             break
@@ -124,15 +137,17 @@ process_taxon() {
         return 1
     fi
 
+    # AmpliPhy 実行後の増幅後MSA (results/<taxon>/msa/*.amp.fa) を最優先探索
     local amp_dir=""
     for cand in \
+        "$PY_MODULE_DIR/results/$taxon/msa" \
+        "$WORK_DIR/Ampliphy2/results/$taxon/msa" \
+        "$WORK_DIR/results/$taxon/msa" \
         "$WORK_DIR/Ampliphy2/results/${taxon}_new/msa" \
         "$WORK_DIR/results/${taxon}_new/msa" \
         "$WORK_DIR/results/${taxon}_new/${short_name}3/msa" \
         "$WORK_DIR/Ampliphy2/results/${taxon}/${short_name}3/msa" \
         "$WORK_DIR/results/${taxon}/${short_name}3/msa" \
-        "$WORK_DIR/Ampliphy2/results/${taxon}/msa" \
-        "$WORK_DIR/results/${taxon}/msa" \
         "$WORK_DIR/results/${taxon}/1e-3/msa"; do
         if [ -d "$cand" ] && compgen -G "$cand/*.amp.fa" > /dev/null; then
             amp_dir="$cand"
@@ -145,14 +160,13 @@ process_taxon() {
 
     if [ -z "$amp_dir" ]; then
         echo "[ERROR] $taxon のホモログ追加後FASTAディレクトリ (AMP_INPUT_DIR) が見つかりません。" >&2
+        echo "       AmpliPhy がまだ実行されていないか、results/$taxon/msa/*.amp.fa が未生成です。" >&2
+        echo "       先に 'bsub < scripts/run_ampliphy.sh' を実行してください。" >&2
         return 1
     fi
 
     # 出力ディレクトリ定義
-    local results_dir="$WORK_DIR/results_gs/$taxon"
-    if [ -d "$WORK_DIR/Ampliphy2" ]; then
-        results_dir="$WORK_DIR/Ampliphy2/results_gs/$taxon"
-    fi
+    local results_dir="$PY_MODULE_DIR/results_gs/$taxon"
 
     local log_dir="${results_dir}/logs"
     local tree_ori_dir="${results_dir}/tree_ori"

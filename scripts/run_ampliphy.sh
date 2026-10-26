@@ -18,8 +18,8 @@
 #BSUB -n 2
 #BSUB -R "span[hosts=1]"
 #BSUB -W 72:00
-#BSUB -o Ampliphy2/logs/ampliphy/master_%J.out
-#BSUB -e Ampliphy2/logs/ampliphy/master_%J.err
+#BSUB -o logs/ampliphy/master_%J.out
+#BSUB -e logs/ampliphy/master_%J.err
 
 set -euo pipefail
 
@@ -38,6 +38,13 @@ if [ -d "$WORK_DIR/Ampliphy2/mmseqs_db" ]; then
     DB_DIR="$WORK_DIR/Ampliphy2/mmseqs_db"
 fi
 mkdir -p "$DB_DIR" "$AMPLIPHY_ROOT/logs/ampliphy"
+
+# ------------------------------------------------------------------------------
+# リアルタイムログ出力設定 (LSFの完了バッファリングを回避し、即座にディスクへ出力)
+# ------------------------------------------------------------------------------
+REALTIME_LOG="$AMPLIPHY_ROOT/logs/ampliphy/ampliphy_live_${LSB_JOBID:-master}.log"
+exec > >(tee -a "$REALTIME_LOG") 2>&1
+echo "リアルタイムログ開始: $(date) -> $REALTIME_LOG"
 
 # ------------------------------------------------------------------------------
 # 実行モード設定:
@@ -268,21 +275,26 @@ print(f'  [Taxonomy] {len(fa_files)} 件の .tax ファイルを $tax_dir に生
     # 出力先ディレクトリ
     local output_dir="$AMPLIPHY_ROOT/results/$taxon"
     local work_dir="$output_dir/work"
-    local log_file="$AMPLIPHY_ROOT/logs/ampliphy/nextflow_${taxon}.log"
-    mkdir -p "$output_dir" "$work_dir"
+    local launch_dir="$output_dir/launch"   # 生物種ごとに独立した起動ディレクトリ (.nextflow/ の競合防止)
+    local log_file="$AMPLIPHY_ROOT/logs/ampliphy/nextflow_${taxon}.log"          # .nextflow.log 相当
+    local console_log="$AMPLIPHY_ROOT/logs/ampliphy/nextflow_${taxon}.console.log" # 進捗表示 (tail -f 用)
+    mkdir -p "$output_dir" "$work_dir" "$launch_dir"
 
-    echo "  INPUT_DIR:  $input_dir"
-    echo "  OUTPUT_DIR: $output_dir"
-    echo "  WORK_DIR:   $work_dir"
-    echo "  DB_DIR:     $DB_DIR"
-    echo "  LOG_FILE:   $log_file"
+    echo "  INPUT_DIR:   $input_dir"
+    echo "  OUTPUT_DIR:  $output_dir"
+    echo "  WORK_DIR:    $work_dir"
+    echo "  DB_DIR:      $DB_DIR"
+    echo "  CONSOLE_LOG: $console_log  (tail -f で確認可)"
 
-    cd "$AMPLIPHY_DIR"
+    cd "$launch_dir"
+    export NXF_OPTS="${NXF_OPTS:--Xms512m -Xmx4g}"
 
+    # Nextflow の標準出力を直接ファイルへリダイレクトする (LSF の -o バッファを経由しない)。
+    # -profile conda は使わない: biotools 環境 (および LSF タスクの beforeScript) を使用する。
     # shellcheck disable=SC2086
-    nextflow -log "$log_file" run ampliphy.nf \
+    nextflow -log "$log_file" run "$AMPLIPHY_DIR/ampliphy.nf" \
+        -ansi-log false \
         -work-dir "$work_dir" \
-        -profile conda \
         -c "$CONFIG_FILE" \
         --input_dir "$input_dir" \
         $tax_arg \
@@ -292,7 +304,9 @@ print(f'  [Taxonomy] {len(fa_files)} 件の .tax ファイルを $tax_dir に生
         --threads 4 \
         --max_depth 5 \
         --mafft_preset auto \
-        -resume
+        --mad_script "$AMPLIPHY_DIR/bin/mad.py" \
+        --tcs_script "$AMPLIPHY_DIR/bin/tcs.py" \
+        -resume > "$console_log" 2>&1
 
     echo "AmpliPhy 完了: $taxon"
     echo "  -> 増幅後MSA: $output_dir/msa/*.amp.fa"
@@ -306,10 +320,15 @@ print(f'  [Taxonomy] {len(fa_files)} 件の .tax ファイルを $tax_dir に生
 # 5. メインループ実行 (全生物種を同時投入してクラスタ全体をフル稼働)
 # ------------------------------------------------------------------------------
 # UniRef50 データベースの事前準備 (並行実行時の重複ダウンロード・競合防止)
-if [ ! -f "$DB_DIR/UniRef50" ] && [ ! -f "$DB_DIR/UniRef50.dbtype" ]; then
-    echo "UniRef50 データベースが未準備のため、初回セットアップを実行します..."
-    mmseqs databases UniRef50 "$DB_DIR/UniRef50" "$WORK_DIR/tmp"
+if [ ! -e "$DB_DIR/UniRef50.dbtype" ] && [ ! -e "$DB_DIR/UniRef50" ]; then
+    DB_LOG="$AMPLIPHY_ROOT/logs/ampliphy/uniref50_download.log"
+    echo "UniRef50 データベースが未準備のため、初回ダウンロードを実行します (数時間かかる場合があります)"
+    echo "  進捗: tail -f $DB_LOG"
+    mkdir -p "$WORK_DIR/tmp"
+    mmseqs databases UniRef50 "$DB_DIR/UniRef50" "$WORK_DIR/tmp" > "$DB_LOG" 2>&1
     echo "UniRef50 データベースの準備が完了しました。"
+else
+    echo "UniRef50 データベース検出済み: $DB_DIR/UniRef50"
 fi
 
 if [ "$MODE" = "cluster" ] && [ "${#TARGET_TAXA[@]}" -gt 1 ]; then

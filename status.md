@@ -1,3 +1,71 @@
+最終更新: 2026-10-27 02:00
+
+## 📈 進捗状況
+- [x] 完了: PhyloTree_Methods_Comparison/run_scripts/run_nextflow2.sh との比較によるログ非表示の原因特定と run_ampliphy.sh 修正 (完了日: 10/27)
+- [ ] 進行中: AmpliPhy ジョブ再投入と進捗確認 (進捗率: 25% / 課題: ジョブ 246032 は旧スクリプトで走行中。kill して再投入が必要)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: Ampliphy2 では実行中に logs が見えない。PhyloTree_Methods_Comparison では見えた。
+- **[原因(差分)]**:
+  1. 参照スクリプトは `nextflow run ... > logs/xxx.log 2>&1` と **スクリプト内で直接ファイルへリダイレクト**。今回は標準出力を LSF の `#BSUB -o` に任せていた (完了時に書き出し)。
+  2. `-profile conda` (`process.conda=envs/ampliphy.yml`) により Nextflow が **隠れて conda 環境を新規構築**していた可能性 (旧 run_amp.sh は不使用)。この間ログが出ない。
+  3. UniRef50 の事前 DL を出力先なしで実行 (未取得なら数時間無音)。
+  4. 4 生物種を同一ディレクトリ (`ampliphy/`) から並列起動 → `.nextflow/` history 競合 (`-resume` 誤参照の恐れ)。
+  5. `#BSUB -o logs/...` のディレクトリが投入時に存在しないと LSF が出力を書けない (参照は事前に mkdir logs)。
+- **[解決策]**: console を `logs/ampliphy/nextflow_<taxon>.console.log` に直接出力、`-profile conda` 削除、生物種ごとの launch dir、UniRef50 DL は `uniref50_download.log` へ、mad/tcs は絶対パス指定。
+- **[パラメータ]**: `-ansi-log false`, `NXF_OPTS=-Xms512m -Xmx4g`
+
+## 🚀 次に行うこと (Next Actions)
+1. `mkdir -p logs/ampliphy logs/gs && bkill 246032`
+2. `ls ~/mmseqs_db ~/Ampliphy2/mmseqs_db` で UniRef50 の有無を確認
+3. 更新を反映後 `bsub < scripts/run_ampliphy.sh`、`tail -f logs/ampliphy/*.console.log`
+
+---
+
+最終更新: 2026-10-27 01:48
+
+## 📈 進捗状況
+- [x] 完了: AmpliPhy マスタージョブ (Job ID: 246032) が mafftsrv4 にて RUN (実行中) 状態で正常起動確認 (完了日: 10/27)
+- [x] 完了: LSF 相対ログ出力パス (logs/ampliphy, logs/gs) の階層ズレ解消修正 (完了日: 10/27)
+- [ ] 進行中: AmpliPhy による UniRef50 チェック・4生物種増幅後MSA (*.amp.fa) のクラスタ並行生成 (進捗率: 15% / 課題: ジョブ実行完了待ち)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: `bjobs` で `ampliphy_cluster_master` が `STAT: RUN` で留まっており、ログファイル (`master_246032.out`) がディスク上に見当たらない。
+- **[解決策]**:
+  1. LSF の標準仕様として、`-o` / `-e` ファイルは実行中はスプールにバッファリングされ、「ジョブ完了時」に書き出される。実行中のリアルタイム標準出力は `bpeek <JOB_ID>` で確認可能。
+  2. 実行ディレクトリ（`~/Ampliphy2`）からの相対パスで `Ampliphy2/logs/...` となっていた箇所を `logs/ampliphy/...` に修正。
+- **[パラメータ]**: JobID: `246032`, ノード: `mafftsrv4`, 確認コマンド: `bpeek 246032`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で `bpeek 246032` を実行し、マスタージョブの進行状況（Nextflowのタスク投入ログ）を確認する。
+2. `bjobs` で各ノード（mafftsrv0〜5）に個別タスクが分散実行されている様子を確認する。
+3. 全タスク完了後、`bsub < scripts/run_gs_pipeline.sh` を投入する。
+
+---
+
+最終更新: 2026-10-27 01:38
+
+## 📈 進捗状況
+- [x] 完了: GS法スクリプト (run_gs_pipeline.sh) を LSF ジョブ配列 (Job Array [1-4]) による全サーバー動的分散仕様に改修 (完了日: 10/27)
+- [x] 完了: AmpliPhy デフォルト実行結果 (results/<taxon>/msa/*.amp.fa) と GS パイプライン入力の優先紐付け設定完了 (完了日: 10/27)
+- [ ] 進行中: AmpliPhy ジョブ投入（デフォルト実行）→ 増幅後MSA生成 → GS法評価 (進捗率: 99% / 課題: スパコン上での bsub 投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: GS法パイプライン（`run_gs_pipeline.sh`）も単一ノード固定ではなく、LSF クラスタ内の空いているサーバーに柔軟に分散させたい。また、AmpliPhy のデフォルト実行で生成される `results/<taxon>/msa/*.amp.fa` を確実に参照できるようにしたい。
+- **[解決策]**:
+  1. `#BSUB -J "gs_pipeline[1-4]"` および `#BSUB -n 8` を設定。1生物種あたり 8 コアの小単位ジョブとして投入することで、48コア機だけでなく 24コア機（mafftsrv0）や部分的な空きコアを持つ任意のサーバーへ即座に充填される仕組みを構築。
+  2. `orig_dir` および `amp_dir` の探索順序を更新し、`PY_MODULE_DIR/results/$taxon/msa`（AmpliPhy の出力先）を最優先で探索するように設定。
+  3. 各生物種の結果出力先を `Ampliphy2/results_gs/$taxon/` に標準化し、ログも `logs/gs/gs_%J_%I.out` に分割保存。
+- **[パラメータ]**: `#BSUB -J "gs_pipeline[1-4]"`, `#BSUB -n 8`, `THREADS=8`, `MMSEQS_SENS=7.5`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で AmpliPhy を実行: `bsub < scripts/run_ampliphy.sh`
+   （デフォルト設定で全サーバーに動的分散し、`results/<taxon>/msa/*.amp.fa` を生成）
+2. AmpliPhy 完了後、GS法パイプラインを実行: `bsub < scripts/run_gs_pipeline.sh`
+   （LSFジョブ配列により4種が空いているサーバーへ自動分散し、数分で系統樹分割・TCS評価が完了）
+
+---
+
 最終更新: 2026-10-27 01:26
 
 ## 📈 進捗状況
