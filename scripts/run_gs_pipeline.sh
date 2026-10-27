@@ -23,13 +23,14 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 # 1. 基本パスとツールの設定 (すべて /home/citrusml2004/Ampliphy2 配下に完全統一)
 # ------------------------------------------------------------------------------
-if [ -d "/home/citrusml2004/Ampliphy2" ]; then
-    AMPLIPHY_ROOT="/home/citrusml2004/Ampliphy2"
-elif [ -d "$HOME/Ampliphy2" ]; then
-    AMPLIPHY_ROOT="$HOME/Ampliphy2"
-else
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    AMPLIPHY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AMPLIPHY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [ ! -d "$AMPLIPHY_ROOT/input_fasta" ]; then
+    if [ -d "/home/citrusml2004/Ampliphy2" ]; then
+        AMPLIPHY_ROOT="/home/citrusml2004/Ampliphy2"
+    elif [ -d "$HOME/Ampliphy2" ]; then
+        AMPLIPHY_ROOT="$HOME/Ampliphy2"
+    fi
 fi
 
 cd "$AMPLIPHY_ROOT"
@@ -153,10 +154,18 @@ process_taxon() {
         return 1
     fi
 
-    # AmpliPhy 実行後の増幅後MSA (Ampliphy2/results/<taxon>/msa/*.amp.fa 固定)
+    # AmpliPhy 実行後の増幅後MSA (Ampliphy2/results/<taxon>/msa/*.amp.fa)
     local amp_dir="$AMPLIPHY_ROOT/results/$taxon/msa"
-    if [ ! -d "$amp_dir" ] || ! compgen -G "$amp_dir/*.amp.fa" > /dev/null; then
-        echo "[ERROR] $taxon のホモログ追加後FASTAディレクトリ ($amp_dir/*.amp.fa) が見つかりません。" >&2
+    if [ ! -d "$amp_dir" ] && [ -d "results/$taxon/msa" ]; then
+        amp_dir="$(pwd)/results/$taxon/msa"
+    elif [ ! -d "$amp_dir" ] && [ -d "$HOME/Ampliphy2/results/$taxon/msa" ]; then
+        amp_dir="$HOME/Ampliphy2/results/$taxon/msa"
+    fi
+
+    shopt -s nullglob
+    local amp_check_files=("$amp_dir"/*.amp.fa)
+    if [ ! -d "$amp_dir" ] || [ ${#amp_check_files[@]} -eq 0 ]; then
+        echo "[ERROR] $taxon のホモログ追加後FASTAディレクトリ ($amp_dir/*.amp.fa) にファイルが見つかりません。" >&2
         echo "       AmpliPhy がまだ実行されていないか、results/$taxon/msa/*.amp.fa が未生成です。" >&2
         echo "       先に 'bsub < scripts/run_ampliphy.sh' を実行してください。" >&2
         return 1
@@ -173,7 +182,7 @@ process_taxon() {
     mkdir -p "$log_dir" "$tree_ori_dir" "$tree_amp_dir" "${eval_dir}/aug" "${eval_dir}/enr"
 
     echo "  ORIG_INPUT_DIR: $orig_dir"
-    echo "  AMP_INPUT_DIR:  $amp_dir"
+    echo "  AMP_INPUT_DIR:  $amp_dir (${#amp_check_files[@]} files found)"
     echo "  RESULTS_DIR:    $results_dir"
 
     # Lineage TSV (データセット配下、または自動生成)
