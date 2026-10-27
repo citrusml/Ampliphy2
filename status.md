@@ -1,3 +1,27 @@
+最終更新: 2026-10-27 17:15
+
+## 📈 進捗状況
+- [x] 完了: `mmseqs_search` エラー（`Estimated memory consumption: 98G`, `Command error: Killed`）の原因完全特定と恒久対策の実装 (完了日: 10/27)
+- [ ] 進行中: UniRef50 インデックス（`createindex`）の事前生成と AmpliPhy ジョブの再開 (進捗率: 80% / 課題: スパコン上での createindex 実行)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: `mmseqs_search` タスク（E0736903）が `Index table: fill` 処理中に `Command error: Killed`（OOM Killer による強制終了）となり停止した。
+- **[原因]**:
+  1. **インデックス未事前生成**: UniRef50 データベース（3,884万配列）に対する `mmseqs createindex` が未作成であったため、1タスクごとに 12分40秒 かけてオンメモリで 98GB のインデックスをゼロから構築しようとしていた (`Estimated memory consumption: 98G`)。
+  2. **メモリ上限**: `configs/cluster_dynamic.config` の設定が `16.GB` であったため、98GB のインデックス構築途中で上限に達し OS/LSF から強制 kill された。
+- **[解決策]**:
+  1. **インデックス事前生成の導入**: `mmseqs createindex` を一度だけ実行して `UniRef50.idx` を作成する。これにより、次回以降の全検索タスクで 12分超の k-mer 計算がスキップ（即時検索開始）され、かつ `--db-load-mode 2` によるディスク直接 mmap 参照（OS ページキャッシュ共有）が機能してメモリ消費が大幅に削減される。
+  2. **メモリ設定の緩和**: `configs/cluster_dynamic.config` の `withLabel: 'mmseqs'` メモリを `16.GB` から `32.GB` へ増強。
+  3. **自動検知ロジック**: `scripts/run_ampliphy.sh` に `UniRef50.idx` の有無を自動チェックする処理を追加。
+- **[パラメータ]**: `UniRef50.idx`, `mmseqs memory: 32.GB`, `createindex threads: 16`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で UniRef50 のインデックスを作成（一度だけ実行、約15〜20分）:
+   `bsub -J mmseqs_index -n 16 -R "span[hosts=1]" -W 2:00 -o logs/ampliphy/index_%J.out -e logs/ampliphy/index_%J.err "mmseqs createindex /home/citrusml2004/mmseqs_db/UniRef50 /home/citrusml2004/tmp --threads 16"`
+2. 作成完了後、リポジトリを更新 (`git pull`) してジョブ再投入 (`bsub < scripts/run_ampliphy.sh`)
+
+---
+
 最終更新: 2026-10-27 03:20
 
 ## 📈 進捗状況

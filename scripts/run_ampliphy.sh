@@ -234,6 +234,21 @@ else
     echo "UniRef50 データベース検出済み: $DB_DIR/UniRef50"
 fi
 
+# UniRef50 インデックスの事前準備 (検索の超高速化 + 各タスクの98GBオンメモリ再構築によるOOM防止)
+if [ ! -e "$DB_DIR/UniRef50.idx" ]; then
+    INDEX_LOG="$AMPLIPHY_ROOT/logs/ampliphy/uniref50_index.log"
+    echo "UniRef50 インデックス未検出: 初回インデックス構築を実行します (約15〜20分)"
+    echo "  進捗: tail -f $INDEX_LOG"
+    mkdir -p "$AMPLIPHY_ROOT/tmp"
+    mmseqs createindex "$DB_DIR/UniRef50" "$AMPLIPHY_ROOT/tmp" --threads 16 > "$INDEX_LOG" 2>&1 || {
+        echo "[WARNING] createindex は大容量メモリを必要とするため、LSF ジョブでの実行を推奨します:" >&2
+        echo "  bsub -J mmseqs_index -n 16 -R \"span[hosts=1]\" -W 2:00 -o logs/ampliphy/index_%J.out -e logs/ampliphy/index_%J.err \"mmseqs createindex $DB_DIR/UniRef50 /home/citrusml2004/tmp --threads 16\"" >&2
+    }
+    echo "UniRef50 インデックスの準備が完了しました ($DB_DIR/UniRef50.idx)。"
+else
+    echo "UniRef50 インデックス検出済み: $DB_DIR/UniRef50.idx"
+fi
+
 # NCBI Taxonomy dump (nodes.dmp, names.dmp) の事前準備 (並行タスク間の重複DL・競合防止)
 if [ ! -f "$NCBI_DIR/nodes.dmp" ] || [ ! -f "$NCBI_DIR/names.dmp" ]; then
     echo "NCBI Taxonomy データを準備中 ($NCBI_DIR)..."
