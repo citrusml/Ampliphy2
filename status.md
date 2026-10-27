@@ -1,3 +1,30 @@
+最終更新: 2026-10-28 08:05
+
+## 📈 進捗状況
+- [x] 完了: `run_gs_pipeline.sh` のリアルタイムログ出力およびHOG毎の進捗ストリーミング対応 (完了日: 10/28)
+- [ ] 進行中: スパコン上での最新コード取得（`git pull`）と GS法パイプライン実行・監視 (進捗率: 95% / 課題: スパコン上でのジョブ投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: LSF バッチ環境では標準出力・標準エラー出力がジョブ完了時までバッファリングされるため、ジョブ実行中に `gs_%J_%I.out` を確認しても進捗が更新されずリアルタイムに状況が把握できなかった。また、HOGループがサイレントに実行されるため進行度が不明瞭だった。
+- **[解決策]**:
+  1. **アンバッファードリアルタイムログ出力**: `run_ampliphy.sh` と同様に `exec > >(tee -a "$REALTIME_LOG") 2>&1` を導入。LSF のバッファリングを完全に回避してディスクへ即時フラッシュ。
+  2. **生物種別シンボリックリンクの自動生成**: `process_taxon()` 実行時に `logs/gs/gs_${taxon}.log` へのシンボリックリンクを自動作成。ジョブIDを意識せず `tail -f logs/gs/gs_<taxon>.log` で目的の生物種の進捗を直接監視可能に。
+  3. **HOG毎の進捗ストリーミング**: HOGループ内で `printf "  [%3d/%3d] %s: 系統樹推定 (gs2) & 枝刈り..."` と完了/スキップ/エラーをリアルタイム出力。Step 5（TCS計算）および Step 6（サマリー集計）の開始・完了も明示。
+  4. **Python出力バッファリング無効化**: `export PYTHONUNBUFFERED=1` を設定し、Python スクリプト内での出力遅延を防止。
+- **[パラメータ]**: `REALTIME_LOG: logs/gs/gs_${LSB_JOBID}_${LSB_JOBINDEX}.log` (または `logs/gs/gs_${taxon}.log`), `PYTHONUNBUFFERED=1`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取得:
+   `git pull origin main`
+2. GSパイプラインを実行:
+   - 全生物種一括 (LSF Job Array): `bsub < scripts/run_gs_pipeline.sh`
+   - 特定の生物種 (対話的実行): `bash scripts/run_gs_pipeline.sh eukaryota`
+3. リアルタイムログで進捗を監視:
+   `tail -f logs/gs/gs_eukaryota.log`
+   （または全種マスター: `tail -f logs/gs/gs_master.log`）
+
+---
+
 最終更新: 2026-10-28 07:50
 
 ## 📈 進捗状況
