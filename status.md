@@ -1,3 +1,33 @@
+最終更新: 2026-10-28 08:38
+
+## 📈 進捗状況
+- [x] 完了: `results_gs/<taxon>/eval` 配下の Newick 出力を実体ファイルコピー（`cp -f`）に変更し、scp 転送時のリンク切れ（`remote stat failed`）を完全防止 (完了日: 10/28)
+- [ ] 進行中: スパコンからの成果物取得・ローカル検証 (進捗率: 95% / 課題: 手元Macへの転送)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: スパコンから手元Macへ `scp -r nigsc:/home/citrusml2004/Ampliphy2/results_gs ./ampliphy_tcsr` を実行した際、`.txt`, `.tsv` は正常に転送されるものの、`.nwk` ファイル（例: `E0789344_gs_enr.nwk`）で `scp: remote stat "..." failed` が発生し、一部の系統樹ファイルが取得できなかった。
+- **[原因]**:
+  1. **シンボリックリンクとリンク切れ**: `eval/aug` および `eval/enr` 配下の `.nwk` ファイルは `ln -sf` で作成されたシンボリックリンクだった。そのHOGでエラーやスキップが生じて実体ファイル（`tree_amp/*.amp.pruned.nwk`）が存在しなかった場合、リンク先が存在しない「孤立（壊れた）シンボリックリンク」となる。
+  2. **scp (SFTP) の stat 失敗**: OpenSSH 9.x の `scp` はシンボリックリンクの転送時にリモート側で `stat()` を呼び出すため、リンク先が存在しないファイルに対して `remote stat failed` を返して転送が失敗していた。
+  3. **絶対パスリンクの移植性問題**: 仮にシンボリックリンクが送れても、リンク先が `/lustre10/home/...` というスパコンの絶対パスのままとなるため、ローカルMac側では開けない。
+- **[解決策]**:
+  1. **実体ファイルコピー化**: `run_gs_pipeline.sh` 内で `ln -sf` ではなく `cp -f` を用いて実体ファイルを `eval/` に配置するように改修。
+  2. **孤立リンクの自動パージ**: 各生物種開始時に `find "${eval_dir}" -xtype l -delete` を実行し、過去の試行で残った壊れたリンクを一掃。
+  3. **HOGエラー時の残骸削除**: HOG処理でスキップやエラーが発生した場合、古い `eval` 側ファイルを `rm -f` して不整合を防止。
+- **[パラメータ]**: `cp -f`, `find -xtype l -delete`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン側の既存結果を今すぐ正常に取り出す（以下のいずれか）:
+   - 推奨 (tar一括アーカイブ):
+     `ssh nigsc "cd /home/citrusml2004/Ampliphy2 && tar -czhf results_gs.tar.gz results_gs"`
+     `scp nigsc:/home/citrusml2004/Ampliphy2/results_gs.tar.gz ./`
+     `tar -xzf results_gs.tar.gz`
+   - 実体ディレクトリを直接取得:
+     `scp -r nigsc:/home/citrusml2004/Ampliphy2/results_gs/amniota/tree_amp ./ampliphy_tcsr/amniota/`
+     `scp -r nigsc:/home/citrusml2004/Ampliphy2/results_gs/amniota/tree_ori ./ampliphy_tcsr/amniota/`
+
+---
+
 最終更新: 2026-10-28 08:15
 
 ## 📈 進捗状況
