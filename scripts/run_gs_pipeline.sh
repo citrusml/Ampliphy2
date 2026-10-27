@@ -209,6 +209,11 @@ process_taxon() {
     echo "  AMP_INPUT_DIR:  $amp_dir (${#amp_check_files[@]} files found)"
     echo "  RESULTS_DIR:    $results_dir"
 
+    # biotools 環境（gs2, mmseqs2, gotree）を有効化
+    activate_env "biotools"
+    export PATH="$(dirname "$GS2_BIN"):$PATH"
+    export PYTHONPATH="${PY_MODULE_DIR}:${PYTHONPATH:-}"
+
     # Lineage TSV (データセット配下、または自動生成)
     local lineage_tsv=""
     if [ -s "$DATASET_DIR/${short_name}_lineage.tsv" ]; then
@@ -235,11 +240,6 @@ generate_lineage_tsv('$taxa_meta', fastas, '$lineage_tsv')
     local total_hogs=${#orig_files[@]}
 
     echo "  検出されたHOG総数: $total_hogs 件"
-
-    # biotools 環境（gs2, mmseqs2, gotree）を有効化
-    activate_env "biotools"
-    export PATH="$(dirname "$GS2_BIN"):$PATH"
-    export PYTHONPATH="${PY_MODULE_DIR}:${PYTHONPATH:-}"
 
     local success_count=0
     local count=0
