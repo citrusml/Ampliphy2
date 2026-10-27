@@ -204,6 +204,8 @@ process_taxon() {
     local eval_dir="${results_dir}/eval"
 
     mkdir -p "$log_dir" "$tree_ori_dir" "$tree_amp_dir" "${eval_dir}/aug" "${eval_dir}/enr"
+    # 過去の試行で残った壊れたシンボリックリンクを自動削除 (scpのエラー防止)
+    find "${eval_dir}" -xtype l -delete 2>/dev/null || true
 
     echo "  ORIG_INPUT_DIR: $orig_dir"
     echo "  AMP_INPUT_DIR:  $amp_dir (${#amp_check_files[@]} files found)"
@@ -251,9 +253,13 @@ generate_lineage_tsv('$taxa_meta', fastas, '$lineage_tsv')
 
         printf "  [%3d/%3d] %s: 系統樹推定 (gs2) & 枝刈り..." "$count" "$total_hogs" "$hog_id"
 
+        local aug_eval_nwk="${eval_dir}/aug/${hog_id}_gs_aug.nwk"
+        local enr_eval_nwk="${eval_dir}/enr/${hog_id}_gs_enr.nwk"
+
         # ホモログ追加後FASTA (AmpliPhy出力: results/<taxon>/msa/<hog_id>.amp.fa)
         local amp_fa="${amp_dir}/${hog_id}.amp.fa"
         if [ ! -f "$amp_fa" ]; then
+            rm -f "$aug_eval_nwk" "$enr_eval_nwk"
             echo " [スキップ: $amp_fa 未検出]"
             continue
         fi
@@ -282,6 +288,7 @@ prepare_unaligned_fasta('$amp_fa', '$clean_amp_fa')
         fi
 
         if [ ! -s "$ori_nwk" ] || [ ! -s "$amp_nwk" ]; then
+            rm -f "$aug_eval_nwk" "$enr_eval_nwk"
             echo " [エラー: gs2系統樹出力が空]"
             continue
         fi
@@ -311,6 +318,7 @@ with open('$prune_list', 'w', encoding='utf-8') as f:
         fi
 
         if [ ! -s "$amp_pruned_nwk" ]; then
+            rm -f "$aug_eval_nwk" "$enr_eval_nwk"
             echo " [エラー: GoTree枝刈りに失敗]"
             continue
         fi
@@ -321,9 +329,9 @@ from src.gs_pipeline import clean_newick_tree
 clean_newick_tree('$amp_pruned_nwk')
 "
 
-        # 評価用ディレクトリへのシンボリックリンク（第一分割根付き樹）
-        ln -sf "$ori_nwk" "${eval_dir}/aug/${hog_id}_gs_aug.nwk"
-        ln -sf "$amp_pruned_nwk" "${eval_dir}/enr/${hog_id}_gs_enr.nwk"
+        # 評価用ディレクトリへのコピー（実体ファイルとして保存し、scpやローカル閲覧時のリンク切れを防止）
+        cp -f "$ori_nwk" "$aug_eval_nwk"
+        cp -f "$amp_pruned_nwk" "$enr_eval_nwk"
 
         echo " 完了"
         ((success_count++))
