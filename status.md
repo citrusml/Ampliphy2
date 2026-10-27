@@ -1,3 +1,38 @@
+最終更新: 2026-10-28 08:15
+
+## 📈 進捗状況
+- [x] 完了: `src/gs_pipeline.py` の numpy / pandas / scipy 依存を遅延インポート化（biotools 環境での ModuleNotFoundError を完全解消） (完了日: 10/28)
+- [ ] 進行中: スパコン上での最新コード取得（`git pull`）と GS法パイプライン本実行 (進捗率: 98% / 課題: スパコン上での再実行)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: スパコン上で `run_gs_pipeline.sh` を実行した際、以下の2箇所でエラーが発生した。
+  1. `[Lineage] euk_taxa.tsv から lineage.tsv を自動生成します...` で `ModuleNotFoundError: No module named 'numpy'`
+  2. `[ 1/100] HOG_E0736661: 系統樹推定 (gs2) & 枝刈り...` で `ModuleNotFoundError: No module named 'pandas'`
+  これにより入力FASTAが生成されず、`[エラー: gs2系統樹出力が空]` となっていた。
+- **[原因]**:
+  - `src/gs_pipeline.py` のモジュール最上位で `import numpy as np`, `import pandas as pd`, `from scipy import stats` を無条件インポートしていた。
+  - しかし、配列整形・枝刈り・系統樹整形（`prepare_unaligned_fasta`, `clean_newick_tree`, `extract_homolog_ids`, `generate_lineage_tsv`）を実行する環境（システムデフォルトPythonや `biotools` 仮想環境）には `numpy` や `pandas` がインストールされていない。
+  - 実際にはこれら4つの前処理・系統樹操作関数は標準ライブラリ（`os`, `re`, `pathlib`, `typing`）のみで完結しており、`numpy` や `pandas` を全く必要としない。
+- **[解決策]**:
+  1. **遅延インポート（Lazy Import）化**: 最上位の `import numpy`, `import pandas`, `import scipy` を削除し、集計関数（`parse_gs_tcs_scores`, `summarize_gs_results`）の内部でのみインポートするように改修。
+  2. **型ヒントの遅延評価**: `from __future__ import annotations` および `TYPE_CHECKING` ガードを採用し、モジュールインポート時の型評価による外部ライブラリ参照を排除。
+  3. **標準ライブラリの利用**: `np.nan` を Python 組み込みの `float("nan")` に置き換え、前処理・系統樹処理群を「外部依存ゼロ（Zero-dependency）」にした。
+  4. **環境有効化順序の整理**: `process_taxon()` 冒頭で `activate_env "biotools"` と `PYTHONPATH` を設定し、lineage 生成から系統樹推定まで一貫した環境で実行されるように改善。
+- **[パラメータ]**: `from __future__ import annotations`, `float("nan")`, `TYPE_CHECKING`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コミットを取り込む:
+   `git pull origin main`
+2. 最新コードが反映されたことを確認（numpyインポートが最上位にないこと）:
+   `head -n 20 src/gs_pipeline.py`
+3. GSパイプラインを実行:
+   - 全生物種一括 (LSF Job Array): `bsub < scripts/run_gs_pipeline.sh`
+   - 特定の生物種 (対話的実行): `bash scripts/run_gs_pipeline.sh eukaryota`
+4. リアルタイムログで進捗を確認:
+   `tail -f logs/gs/gs_eukaryota.log`
+
+---
+
 最終更新: 2026-10-28 08:05
 
 ## 📈 進捗状況
