@@ -6,3 +6,4 @@ mmseqs_db/
 .nextflow/
 .nextflow.log*
 work/
+tests/*
