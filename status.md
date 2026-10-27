@@ -1,3 +1,31 @@
+最終更新: 2026-10-28 07:50
+
+## 📈 進捗状況
+- [x] 完了: `run_gs_pipeline.sh` の `amp_dir` パス解決ロジックの自己完結化・フォールバック対応およびファイル配列検知の堅牢化 (完了日: 10/28)
+- [ ] 進行中: スパコン上での `git pull` 適用と GS法パイプライン実行 (進捗率: 95% / 課題: スパコン上での最新コード取得)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: スパコン上で `ls results/$taxon/msa/*.amp.fa` では全100件が確認できるにもかかわらず、`run_gs_pipeline.sh` の実行時に `[ERROR] <taxon> のホモログ追加後FASTAディレクトリ (AMP_INPUT_DIR) が見つかりません。` と出力され失敗した。
+- **[原因]**:
+  1. **旧バージョンの実行**: `(AMP_INPUT_DIR)` というエラーメッセージ文字列は旧コミット（`328abc5` 以前）の候補探索ループでのみ出力される文言であり、スパコン側で最新コード（`5f3451a` / `c901c2d`）が `git pull` されておらず古いスクリプトが動いていた。
+  2. **ルートパス解決の脆弱性**: 旧コードでは `WORK_DIR="$HOME"` を基準に `cand` ループを回していたため、実行時のカレントディレクトリや環境変数によって探索パスが狂う可能性があった。
+- **[解決策]**:
+  1. **自己完結型ルート解決**: `SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"` と `AMPLIPHY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"` を最優先にし、スクリプトの配置場所から確実にルートを特定。
+  2. **カレント相対パスへのフォールバック**: `AMPLIPHY_ROOT/results` だけでなく、カレントディレクトリ直下の `results/$taxon/msa` や `$HOME/Ampliphy2/results` にもフォールバックする二重の安全策を導入。
+  3. **配列グロブ検知**: `compgen -G` ではなく `shopt -s nullglob; local amp_check_files=("$amp_dir"/*.amp.fa)` で配列長 `${#amp_check_files[@]}` を直接検査し、検知された件数（例: `100 files found`）をログに明示。
+- **[パラメータ]**: `AMPLIPHY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"`, `amp_dir: results/$taxon/msa`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コミットを取り込む:
+   `git pull origin main`
+2. 最新版が反映されたことを確認:
+   `grep "files found" scripts/run_gs_pipeline.sh`
+3. GSパイプラインを実行:
+   `bash scripts/run_gs_pipeline.sh eukaryota`
+   （または一括バッチ投入: `bsub < scripts/run_gs_pipeline.sh`）
+
+---
+
 最終更新: 2026-10-28 04:45
 
 ## 📈 進捗状況
