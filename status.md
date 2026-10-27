@@ -1,3 +1,34 @@
+最終更新: 2026-10-27 19:25
+
+## 📈 進捗状況
+- [x] 完了: `mmseqs_search` が2時間近く進まない原因の特定（Lustre上の `--db-load-mode 2` によるmmapロック競合）と、旧本番環境知見（`--db-load-mode 0`, `--split-memory-limit 25G`, ノードローカル`/tmp`）に基づく高速化パッチ適用 (完了日: 10/27)
+- [ ] 進行中: 滞留ジョブ停止（`bkill`）後の再投入と高速進行の確認 (進捗率: 85% / 課題: スパコン上での bkill & 再開)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: 17:25 に投入された大量の `nf-mmseqs_search` ジョブが 2 時間近く経過しても 1 件も完了せず停止状態になっていた。
+- **[原因]**:
+  1. **Lustre 上の mmap デッドロック**: `--db-load-mode 2`（mmap: オンデマンド読み込み）が指定されていたため、全並列タスクが Lustre 共有ストレージ上の 35GB インデックスに対してネットワーク経由で無数の 4KB ランダムアクセスを発行し、Lustre 分散ロック（LDLM）の激しい競合により全プロセスが Disk Sleep（I/O 待ち）で固まっていた。
+  2. **旧本番コード (`amplify/scripts/run_amp.sh`) との差分**: 旧環境でも全く同一の問題が発生しており、スクリプト内で `perl -pi -e 's/--db-load-mode 2/--db-load-mode 0/g'` とパッチして `--split-memory-limit 25G` を付与して動作させていたことが判明。
+- **[解決策]**:
+  1. **`--db-load-mode 0` への変更**: `ampliphy_mmseqs_search.sh` を改修し、ネットワークストレージでデッドロックする `mmap` を廃止して標準/自動モード（`--db-load-mode 0`）に切替。
+  2. **メモリ分割オプションの追加**: `run_ampliphy.sh` に `--mmseqs_options "--split-memory-limit 25G"` を設定。
+  3. **ノードローカル `/tmp` の活用**: 一時ファイル（中間行列等）の書き込み先を Lustre ではなく各計算ノードのローカルディスク（`--tmp_dir "/tmp/ampliphy_${USER}_${taxon}"`）に変更し、タスク終了時に自動削除するクリーンアップを追加。
+  4. **スレッド数最適化**: `mmseqs_search.nf` を改修し、LSF 確保コア数（`task.cpus` = 8コア）を余さず 8 スレッドで並列計算させるよう更新。
+- **[パラメータ]**: `--db-load-mode 0`, `--split-memory-limit 25G`, `--threads 8`, `--tmp_dir /tmp/...`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で固まっている古いジョブを停止:
+   `bkill 249454` （マスターを止めると個別タスクも連動停止）
+2. 念のため残存タスクを一括停止:
+   `bkill -J "nf-mmseqs_search*"`
+3. 最新修正を取り込み (`git pull`)
+4. 再度ジョブ投入:
+   `bsub < scripts/run_ampliphy.sh`
+5. リアルタイムログで各タスクが数分単位で完了することを確認:
+   `tail -f logs/ampliphy/nextflow_amniota.log`
+
+---
+
 最終更新: 2026-10-27 17:15
 
 ## 📈 進捗状況

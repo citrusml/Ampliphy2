@@ -42,8 +42,12 @@ if [ ! -d "$AMPLIPHY_SOURCE" ] && [ -d "$HOME/ampliphy" ]; then
 fi
 if [ ! -d "$AMPLIPHY_ROOT/ampliphy" ] && [ -d "$AMPLIPHY_SOURCE" ]; then
     ln -sfn "$AMPLIPHY_SOURCE" "$AMPLIPHY_ROOT/ampliphy"
-fi
 AMPLIPHY_DIR="$AMPLIPHY_ROOT/ampliphy"
+
+# MMseqs2 検索スクリプトのパッチ (Lustre共有ストレージ上でのmmapデッドロック防止: --db-load-mode 2 -> 0)
+if [ -f "$AMPLIPHY_DIR/bin/ampliphy_mmseqs_search.sh" ]; then
+    sed -i 's/--db-load-mode 2/--db-load-mode 0/g' "$AMPLIPHY_DIR/bin/ampliphy_mmseqs_search.sh" 2>/dev/null || true
+fi
 
 # ampliphy-analysis リポジトリの配置 (/home/citrusml2004/ampliphy-analysis へのシンボリックリンク)
 ANALYSIS_SOURCE="/home/citrusml2004/ampliphy-analysis"
@@ -206,7 +210,9 @@ run_taxon() {
         --output_dir "$output_dir" \
         --database UniRef50 \
         --database_dir "$DB_DIR" \
-        --threads 4 \
+        --threads 8 \
+        --mmseqs_options "--split-memory-limit 25G" \
+        --tmp_dir "/tmp/ampliphy_${USER:-citrusml2004}_${taxon}" \
         --max_depth 5 \
         --mafft_preset auto \
         --mad_script "$AMPLIPHY_DIR/bin/mad.py" \
