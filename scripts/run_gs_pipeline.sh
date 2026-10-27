@@ -48,7 +48,8 @@ AMPLIPHY_DIR="/home/citrusml2004/ampliphy"
 if [ ! -d "$AMPLIPHY_DIR" ]; then
     AMPLIPHY_DIR="$HOME/ampliphy"
 fi
-MAD_SCRIPT="$AMPLIPHY_DIR/bin/mad.py"
+# GS法では MAD は使用せず、PhyloMethod_Comparison 準拠で gs2 の第一分割（トップダウン2分割）を根としてそのまま使用
+# MAD_SCRIPT="$AMPLIPHY_DIR/bin/mad.py"
 
 DATASET_DIR="/home/citrusml2004/ampliphy-analysis/dataset"
 if [ ! -d "$DATASET_DIR" ]; then
@@ -250,27 +251,12 @@ prepare_unaligned_fasta('$amp_fa', '$clean_amp_fa')
             continue
         fi
 
-        # Step 3: クリーンアップ & MAD ルート化
+        # Step 3: クリーンアップ & 第一分割ルートの採用（MAD不使用・PhyloMethod_Comparison準拠）
         python3 -c "
 from src.gs_pipeline import clean_newick_tree
 clean_newick_tree('$ori_nwk')
 clean_newick_tree('$amp_nwk')
 "
-
-        local ori_rooted="${ori_nwk}.rooted"
-        if [ ! -s "$ori_rooted" ]; then
-            python "$MAD_SCRIPT" "$ori_nwk" &> /dev/null || true
-        fi
-
-        local amp_rooted="${amp_nwk}.rooted"
-        if [ ! -s "$amp_rooted" ]; then
-            python "$MAD_SCRIPT" "$amp_nwk" &> /dev/null || true
-        fi
-
-        if [ ! -s "$ori_rooted" ] || [ ! -s "$amp_rooted" ]; then
-            echo "    [ERROR] MADルート化に失敗しました: $hog_id"
-            continue
-        fi
 
         # Step 4: 追加ホモログの枝刈り (GoTree Pruning)
         python3 -c "
@@ -282,11 +268,11 @@ with open('$prune_list', 'w', encoding='utf-8') as f:
 "
 
         if [ -s "$prune_list" ]; then
-            tr -d "'" < "$amp_rooted" | gotree prune \
+            tr -d "'" < "$amp_nwk" | gotree prune \
                 -f "$prune_list" \
                 -o "$amp_pruned_nwk" 2> /dev/null || true
         else
-            cp "$amp_rooted" "$amp_pruned_nwk"
+            cp "$amp_nwk" "$amp_pruned_nwk"
         fi
 
         if [ ! -s "$amp_pruned_nwk" ]; then
@@ -294,8 +280,14 @@ with open('$prune_list', 'w', encoding='utf-8') as f:
             continue
         fi
 
-        # 評価用ディレクトリへのシンボリックリンク
-        ln -sf "$ori_rooted" "${eval_dir}/aug/${hog_id}_gs_aug.nwk"
+        # 枝刈り後Newickの構文クリーンアップ（セミコロン保証等）
+        python3 -c "
+from src.gs_pipeline import clean_newick_tree
+clean_newick_tree('$amp_pruned_nwk')
+"
+
+        # 評価用ディレクトリへのシンボリックリンク（第一分割根付き樹）
+        ln -sf "$ori_nwk" "${eval_dir}/aug/${hog_id}_gs_aug.nwk"
         ln -sf "$amp_pruned_nwk" "${eval_dir}/enr/${hog_id}_gs_enr.nwk"
 
         ((success_count++))

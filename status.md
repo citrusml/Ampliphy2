@@ -1,3 +1,28 @@
+最終更新: 2026-10-28 04:45
+
+## 📈 進捗状況
+- [x] 完了: GS法（gs2）のルーティング仕様を PhyloMethod_Comparison 準拠の「第一分割（最外殻2分割）ルート」へ改修、MAD依存の撤廃 (完了日: 10/28)
+- [ ] 進行中: ホモログ追加後MSA（`results/<taxon>/msa/*.amp.fa`）を用いた GS法パイプラインの実行とTCS評価 (進捗率: 90% / 課題: スパコン上でのジョブ投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: GS法による系統樹推定において、従来は無根木と同様に MAD（Minimal Ancestor Deviation）スクリプトで再ルーティングを行っていたが、PhyloMethod_Comparison での実績・知見通り「GS法はトップダウンの再帰的2分割法であり、最上位の第一分割が自然な根（Root）を形成している」ため、MAD による再推定を排して第一分割を根として採用する方針に統一したい。
+- **[解決策]**:
+  1. **MAD実行の廃止**: `scripts/run_gs_pipeline.sh` から `mad.py` 呼び出しおよび依存コードを削除・コメントアウト。
+  2. **第一分割根の直接維持**: `gs2 -l -s ...` の出力を `clean_newick_tree` で整形し、第一分割の根構造をそのまま保持。
+  3. **GoTree枝刈りの直接適用**: 第一分割で根付けされた `$amp_nwk` に対して直接 `gotree prune` を実行し、追加ホモログのみを切り落として評価用樹（`*.amp.pruned.nwk`）を生成。
+  4. **ユニットテスト拡充**: `tests/test_gs_pipeline.py` に `clean_newick_tree` や `extract_homolog_ids` のテストを追加し、テスト通過を確認。
+- **[パラメータ]**: `gs2 -l -t 8 -m 7.5 -s`, `amp_dir: results/<taxon>/msa/*.amp.fa`, `pruning: gotree prune -f`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取り込み (`git pull`)
+2. `results/<taxon>/msa/*.amp.fa` が準備でき次第、GSパイプラインを実行:
+   `bsub < scripts/run_gs_pipeline.sh`
+   （または対話型で個別種実行: `bash scripts/run_gs_pipeline.sh eukaryota`）
+3. 実行ログおよび TCS サマリーの確認:
+   `cat results_gs/<taxon>/gs_tcs_summary.txt`
+
+---
+
 最終更新: 2026-10-27 19:25
 
 ## 📈 進捗状況
