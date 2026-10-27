@@ -42,6 +42,7 @@ if [ ! -d "$AMPLIPHY_SOURCE" ] && [ -d "$HOME/ampliphy" ]; then
 fi
 if [ ! -d "$AMPLIPHY_ROOT/ampliphy" ] && [ -d "$AMPLIPHY_SOURCE" ]; then
     ln -sfn "$AMPLIPHY_SOURCE" "$AMPLIPHY_ROOT/ampliphy"
+fi
 AMPLIPHY_DIR="$AMPLIPHY_ROOT/ampliphy"
 
 # MMseqs2 検索スクリプトのパッチ (Lustre共有ストレージ上でのmmapデッドロック防止: --db-load-mode 2 -> 0)
