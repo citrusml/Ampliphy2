@@ -83,6 +83,26 @@ else
     TARGET_TAXA=("${ALL_TAXA[@]}")
 fi
 
+# ------------------------------------------------------------------------------
+# リアルタイムログ出力設定 (LSFバッファリング回避 + tail -f で即時進捗確認可能)
+# ------------------------------------------------------------------------------
+mkdir -p "$AMPLIPHY_ROOT/logs/gs"
+if [ -n "${LSB_JOBID:-}" ] && [ -n "${LSB_JOBINDEX:-}" ]; then
+    REALTIME_LOG="$AMPLIPHY_ROOT/logs/gs/gs_${LSB_JOBID}_${LSB_JOBINDEX}.log"
+elif [ -n "${LSB_JOBID:-}" ]; then
+    REALTIME_LOG="$AMPLIPHY_ROOT/logs/gs/gs_${LSB_JOBID}.log"
+elif [ "${#TARGET_TAXA[@]}" -eq 1 ]; then
+    REALTIME_LOG="$AMPLIPHY_ROOT/logs/gs/gs_${TARGET_TAXA[0]}.log"
+else
+    REALTIME_LOG="$AMPLIPHY_ROOT/logs/gs/gs_master.log"
+fi
+
+# Pythonの標準出力バッファリングを無効化 (リアルタイムストリーミング保証)
+export PYTHONUNBUFFERED=1
+
+exec > >(tee -a "$REALTIME_LOG") 2>&1
+echo "リアルタイムログ開始: $(date) -> $REALTIME_LOG"
+
 echo "=============================================================================="
 echo "GS Method (gs2) Multi-Taxa TCS Evaluation Pipeline"
 echo "Started at:    $(date)"
@@ -145,7 +165,11 @@ process_taxon() {
     echo ""
     echo "##############################################################################"
     echo "# 生物種グループ開始: $taxon ($short_name)"
+    echo "# リアルタイム監視: tail -f logs/gs/gs_${taxon}.log"
     echo "##############################################################################"
+
+    # 対象生物種のリアルタイムログシンボリックリンクを作成
+    ln -sfn "$REALTIME_LOG" "$AMPLIPHY_ROOT/logs/gs/gs_${taxon}.log"
 
     # 入力FASTAディレクトリ (探索なし・Ampliphy2/input_fasta/<taxon> 固定)
     local orig_dir="$AMPLIPHY_ROOT/input_fasta/$taxon"
@@ -225,10 +249,12 @@ generate_lineage_tsv('$taxa_meta', fastas, '$lineage_tsv')
         local fname=$(basename "$orig_fa")
         local hog_id="${fname%.fa}"
 
+        printf "  [%3d/%3d] %s: 系統樹推定 (gs2) & 枝刈り..." "$count" "$total_hogs" "$hog_id"
+
         # ホモログ追加後FASTA (AmpliPhy出力: results/<taxon>/msa/<hog_id>.amp.fa)
         local amp_fa="${amp_dir}/${hog_id}.amp.fa"
         if [ ! -f "$amp_fa" ]; then
-            echo "    [WARN] 対応するホモログ追加後FASTAが見つかりません。スキップ: $hog_id ($amp_fa)"
+            echo " [スキップ: $amp_fa 未検出]"
             continue
         fi
 
@@ -256,7 +282,7 @@ prepare_unaligned_fasta('$amp_fa', '$clean_amp_fa')
         fi
 
         if [ ! -s "$ori_nwk" ] || [ ! -s "$amp_nwk" ]; then
-            echo "    [ERROR] gs2 系統樹出力が空です: $hog_id"
+            echo " [エラー: gs2系統樹出力が空]"
             continue
         fi
 
@@ -285,7 +311,7 @@ with open('$prune_list', 'w', encoding='utf-8') as f:
         fi
 
         if [ ! -s "$amp_pruned_nwk" ]; then
-            echo "    [ERROR] GoTree枝刈りに失敗しました: $hog_id"
+            echo " [エラー: GoTree枝刈りに失敗]"
             continue
         fi
 
@@ -299,6 +325,7 @@ clean_newick_tree('$amp_pruned_nwk')
         ln -sf "$ori_nwk" "${eval_dir}/aug/${hog_id}_gs_aug.nwk"
         ln -sf "$amp_pruned_nwk" "${eval_dir}/enr/${hog_id}_gs_enr.nwk"
 
+        echo " 完了"
         ((success_count++))
     done
 
@@ -310,9 +337,10 @@ clean_newick_tree('$amp_pruned_nwk')
     cat /dev/null > "$out_scores"
 
     if [ -s "$lineage_tsv" ]; then
-        echo "  [TCS] スコア計算中..."
+        echo "  [Step 5/6] TCS スコア計算中 (eval/aug & eval/enr)..."
         python "$TCS_SCRIPT" "${eval_dir}/enr" "$lineage_tsv" >> "$out_scores"
         python "$TCS_SCRIPT" "${eval_dir}/aug" "$lineage_tsv" >> "$out_scores"
+        echo "  [Step 5/6] TCS スコア計算完了"
     else
         echo "  [WARN] Lineageファイルが見つかりません。TCS計算をスキップ。"
     fi
@@ -320,6 +348,7 @@ clean_newick_tree('$amp_pruned_nwk')
     # Step 6: 結果集計とサマリーレポート
     local report_txt="${results_dir}/gs_tcs_summary.txt"
     if [ -s "$out_scores" ]; then
+        echo "  [Step 6/6] TCS 結果集計およびサマリー出力中..."
         python3 -c "
 import pandas as pd
 from src.gs_pipeline import parse_gs_tcs_scores, summarize_gs_results
