@@ -1,30 +1,107 @@
-最終更新: 2026-10-28 08:38
+最終更新: 2026-10-28 15:48
 
 ## 📈 進捗状況
-- [x] 完了: `results_gs/<taxon>/eval` 配下の Newick 出力を実体ファイルコピー（`cp -f`）に変更し、scp 転送時のリンク切れ（`remote stat failed`）を完全防止 (完了日: 10/28)
-- [ ] 進行中: スパコンからの成果物取得・ローカル検証 (進捗率: 95% / 課題: 手元Macへの転送)
+- [x] 完了: `de novo` かつ `MaxAlign (after+keep)` 専用の独立 Config および実行スクリプトの新規作成 (完了日: 10/28)
+- [ ] 進行中: 新スクリプトを用いた AmpliPhy パイプライン実行・検証 (進捗率: 0% / 課題: スパコン上でのジョブ投入)
 
 ## 🛠 技術的決定・メモ
-- **[課題]**: スパコンから手元Macへ `scp -r nigsc:/home/citrusml2004/Ampliphy2/results_gs ./ampliphy_tcsr` を実行した際、`.txt`, `.tsv` は正常に転送されるものの、`.nwk` ファイル（例: `E0789344_gs_enr.nwk`）で `scp: remote stat "..." failed` が発生し、一部の系統樹ファイルが取得できなかった。
-- **[原因]**:
-  1. **シンボリックリンクとリンク切れ**: `eval/aug` および `eval/enr` 配下の `.nwk` ファイルは `ln -sf` で作成されたシンボリックリンクだった。そのHOGでエラーやスキップが生じて実体ファイル（`tree_amp/*.amp.pruned.nwk`）が存在しなかった場合、リンク先が存在しない「孤立（壊れた）シンボリックリンク」となる。
-  2. **scp (SFTP) の stat 失敗**: OpenSSH 9.x の `scp` はシンボリックリンクの転送時にリモート側で `stat()` を呼び出すため、リンク先が存在しないファイルに対して `remote stat failed` を返して転送が失敗していた。
-  3. **絶対パスリンクの移植性問題**: 仮にシンボリックリンクが送れても、リンク先が `/lustre10/home/...` というスパコンの絶対パスのままとなるため、ローカルMac側では開けない。
+- **[課題]**: 既存のデフォルト設定（`cluster_dynamic.config` / `run_ampliphy.sh`）を書き換えることなく、`de novo`（一からMSA構築）かつ `MaxAlign (after+keep)`（配列追加後に元配列を維持しながら低品質ホモログを刈り込み）を確実に実行できる独立した設定ファイルと実行スクリプトを整備したい。
 - **[解決策]**:
-  1. **実体ファイルコピー化**: `run_gs_pipeline.sh` 内で `ln -sf` ではなく `cp -f` を用いて実体ファイルを `eval/` に配置するように改修。
-  2. **孤立リンクの自動パージ**: 各生物種開始時に `find "${eval_dir}" -xtype l -delete` を実行し、過去の試行で残った壊れたリンクを一掃。
-  3. **HOGエラー時の残骸削除**: HOG処理でスキップやエラーが発生した場合、古い `eval` 側ファイルを `rm -f` して不整合を防止。
-- **[パラメータ]**: `cp -f`, `find -xtype l -delete`
+  1. **新設定ファイルの作成** (`configs/cluster_dynamic_denovo_maxalign.config`):
+     - `params.mafft_amplify_mode = 'denovo'`
+     - `params.maxalign_after = true`
+     - `params.maxalign_options = ''`
+     - LSFクラスタ（mafftsrv0〜5, mafftweb）動的分散設定を完全に継承した独立設定ファイルとして作成。
+  2. **新ジョブスクリプトの作成** (`scripts/run_ampliphy_denovo_maxalign.sh`):
+     - 上記の新設定ファイル `cluster_dynamic_denovo_maxalign.config` を明示的に指定。
+     - ジョブ名 `#BSUB -J ampliphy_denovo_maxa`、ログファイル `logs/ampliphy/master_denovo_maxa_%J.out` を分離。
+     - 出力先ベースディレクトリは環境変数 `RESULTS_DIR` で切り替え可能としつつ、デフォルトで `results/` に出力して後続の GS パイプライン（`run_gs_pipeline.sh`）がシームレスに `*.maxaligned.fa` を検出できるように配慮。
+  3. **既存スクリプトの柔軟性向上** (`scripts/run_ampliphy.sh`):
+     - `CONFIG_FILE="${CONFIG_FILE:-$CONFIG_DIR/cluster_dynamic.config}"` とし、環境変数経由での設定ファイル差し替え実行にも対応。
+- **[パラメータ]**: `CONFIG_FILE = configs/cluster_dynamic_denovo_maxalign.config`, `mafft_amplify_mode = 'denovo'`, `maxalign_after = true`
 
 ## 🚀 次に行うこと (Next Actions)
-1. スパコン側の既存結果を今すぐ正常に取り出す（以下のいずれか）:
-   - 推奨 (tar一括アーカイブ):
-     `ssh nigsc "cd /home/citrusml2004/Ampliphy2 && tar -czhf results_gs.tar.gz results_gs"`
-     `scp nigsc:/home/citrusml2004/Ampliphy2/results_gs.tar.gz ./`
-     `tar -xzf results_gs.tar.gz`
-   - 実体ディレクトリを直接取得:
-     `scp -r nigsc:/home/citrusml2004/Ampliphy2/results_gs/amniota/tree_amp ./ampliphy_tcsr/amniota/`
-     `scp -r nigsc:/home/citrusml2004/Ampliphy2/results_gs/amniota/tree_ori ./ampliphy_tcsr/amniota/`
+1. スパコン上で `de novo + MaxAlign` 専用スクリプトを実行:
+   `bsub < scripts/run_ampliphy_denovo_maxalign.sh`
+   （または特定生物種のみ: `bash scripts/run_ampliphy_denovo_maxalign.sh eukaryota`）
+2. ログで進捗を確認:
+   `tail -f logs/ampliphy/ampliphy_denovo_maxa_master.log`
+   （または各生物種別: `tail -f logs/ampliphy/nextflow_denovo_maxa_eukaryota.log`）
+3. 生成された MSA (`results/<taxon>/msa/*.maxaligned.fa`) を用いて GS パイプラインを実行:
+   `bsub < scripts/run_gs_pipeline.sh`
+
+---
+
+最終更新: 2026-10-28 15:37
+
+## 📈 進捗状況
+- [x] 完了: MaxAlign（after + keep_original 簡易バージョン）のパイプライン導入 (完了日: 10/28)
+- [ ] 進行中: MaxAlign 適用時と通常時での MSA 改善度および系統樹推定・TCS スコア比較検証 (進捗率: 0% / 課題: スパコン上での実行)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: 以前の amplify リポジトリで使用していた「ホモログ追加後に元配列を維持しながら低品質・ギャップ過多な配列を取り除く MaxAlign（`maxalign_after` + `keep_original`）」を、現在の Ampliphy2 に最小限の修正で復元・導入したい。
+- **[解決策]**:
+  1. **MaxAlign スクリプトの配置とバグ修正** (`ampliphy/bin/maxalign.pl`):
+     - `maxalign.pl` を `ampliphy/bin/` に配置。
+     - 入力末尾の配列に must-keep 接頭辞 `+` が付いている場合に配列名に `+` が残留してしまう既知のバグ（`push(@sequenceheaders, $header)` がチェック・除去の前に行われていた点）を修正。
+  2. **MaxAlign モジュールの作成** (`ampliphy/modules/maxalign.nf`):
+     - 元 MSA（`ref_fa`）から元の配列 ID を抽出し、増幅後 MSA（`amp_fa`）内の該当配列ヘッダーに `>+` を付与。
+     - `perl maxalign.pl -p ${options} _preprocessed.fa` を実行し、元配列を100%保持したままホモログのトリミングを実施。
+     - 1行FASTA（flatfa）へ整形して `${id}.maxaligned.fa` を出力。
+  3. **ワークフロー連携** (`ampliphy/ampliphy.nf`):
+     - `params.maxalign_after` が `true` の場合のみ `maxalign` プロセスを実行し、IQ-TREE の入力チャンネルに `${id}.maxaligned.fa` を渡す構成に改修（`false` の場合は追加計算なしで従来の `.amp.fa` を直接使用）。
+  4. **設定とジョブスクリプトの連携**:
+     - `configs/cluster_dynamic.config` および `ampliphy/nextflow.config` に `params.maxalign_after = false` を追加。
+     - `scripts/run_ampliphy.sh` に `MAXALIGN_AFTER` 環境変数サポートを追加。
+     - `scripts/run_gs_pipeline.sh` において `.maxaligned.fa` が存在する場合は優先的に読み込むように対応。
+- **[パラメータ]**: `params.maxalign_after = false` (または `true`), `params.maxalign_options = ''`
+
+## 🚀 次に行うこと (Next Actions)
+1. `configs/cluster_dynamic.config` または環境変数で MaxAlign を有効化:
+   - MaxAlign を適用する場合: `maxalign_after = true`
+   - MaxAlign を適用しない場合（従来）: `maxalign_after = false`
+2. スパコン上で AmpliPhy を実行:
+   `bsub < scripts/run_ampliphy.sh`
+   （またはCLI指定: `MAXALIGN_AFTER=true bsub < scripts/run_ampliphy.sh`）
+3. 出力された MSA (`results/<taxon>/msa/*.maxaligned.fa` または `*.amp.fa`) を用いて GS パイプラインを実行:
+   `bsub < scripts/run_gs_pipeline.sh`
+
+---
+
+最終更新: 2026-10-28 15:20
+
+## 📈 進捗状況
+- [x] 完了: MAFFT増幅処理における MSA 構築モード切替機能の実装（`addfragments` 固定から config による `denovo` / `addfragments` 切替対応） (完了日: 10/28)
+- [ ] 進行中: 新 MSA モードでの AmpliPhy / GS パイプライン実行・系統樹推定・TCS評価 (進捗率: 0% / 課題: スパコン上での実行)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: AmpliPhy のホモログ追加ステップ（`mafft_amplify.nf`）において、MAFFT のオプションが `--addfragments`（および `--keeplength`）に固定されていた。集めてきたホモログ配列と元配列を一括して一から MSA を再構築（de novo アライメント）できるように、設定ファイル（config）から柔軟に挙動を変更したい。
+- **[解決策]**:
+  1. **最小限の差分でモード切替ロジックを導入** (`ampliphy/modules/mafft_amplify.nf`):
+     - `params.mafft_amplify_mode`（未指定時はデフォルト `addfragments`）を参照。
+     - `denovo`（または `main`, `scratch`, `full`）指定時:
+       - `sed '/^>/!s/-//g' "${msa}" > combined.fa` で元 MSA からギャップ（`-`）を除去して非整列FASTAに戻す。
+       - `cat "${homologs}" >> combined.fa` で MMseqs2 で収集したホモログ配列を結合。
+       - `mafft --anysymbol --quiet --thread ${threads} --threadit 0 ${mafft_flag} combined.fa` を実行し、全配列から de novo に一から MSA を構築。
+     - `add` 指定時: `--add "${homologs}" "${msa}"` による追加アライメントを実行。
+     - `addfragments` 指定時（デフォルト）: 従来通り `--keeplength --addfragments "${homologs}" "${msa}"` を実行。
+     - ホモログが空の場合は従来通り元 MSA をそのままコピーして警告出力。
+  2. **Config への設定項目追加**:
+     - `configs/cluster_dynamic.config` の `params` ブロックに `mafft_amplify_mode = 'addfragments'` を追加（ここを `'denovo'` に書き換えるだけで動作切替が可能）。
+     - `ampliphy/nextflow.config` にもデフォルト定義 `mafft_amplify_mode = 'addfragments'` を追加。
+  3. **ジョブスクリプト連携** (`scripts/run_ampliphy.sh`):
+     - 環境変数 `MAFFT_AMPLIFY_MODE` が指定されている場合は CLI 引数 `--mafft_amplify_mode` として Nextflow に渡し、未指定時は `cluster_dynamic.config` の値がそのまま使われるように透過的サポート。
+- **[パラメータ]**: `params.mafft_amplify_mode = 'addfragments'` (または `'denovo'`, `'add'`)
+
+## 🚀 次に行うこと (Next Actions)
+1. `configs/cluster_dynamic.config` で MSA 構築モードを選択:
+   - 一から MSA を作成する場合: `mafft_amplify_mode = 'denovo'`
+   - 既存アライメントに断片追加する場合（従来）: `mafft_amplify_mode = 'addfragments'`
+2. スパコン上で AmpliPhy を実行して MSA を生成:
+   `bsub < scripts/run_ampliphy.sh`
+   （またはCLI指定: `MAFFT_AMPLIFY_MODE=denovo bash scripts/run_ampliphy.sh`）
+3. 生成された MSA (`results/<taxon>/msa/*.amp.fa`) を用いて GS パイプラインを実行:
+   `bsub < scripts/run_gs_pipeline.sh`
 
 ---
 

@@ -70,6 +70,12 @@ else
     DB_DIR="$HOME/mmseqs_db"
 fi
 
+# MAFFT 増幅モード ('addfragments' または 'denovo'。未指定時は cluster_dynamic.config の設定を使用)
+MAFFT_AMPLIFY_MODE="${MAFFT_AMPLIFY_MODE:-}"
+
+# MaxAlign 設定 ('true' で配列追加後に元配列を維持しながらMaxAlignを実行、未指定時は cluster_dynamic.config の設定を使用)
+MAXALIGN_AFTER="${MAXALIGN_AFTER:-}"
+
 # 必要なディレクトリ群を作成
 mkdir -p "$NCBI_DIR" "$CONFIG_DIR" "$AMPLIPHY_ROOT/logs/ampliphy" "$AMPLIPHY_ROOT/results"
 
@@ -97,6 +103,8 @@ echo "AMPLIPHY_DIR:     $AMPLIPHY_DIR"
 echo "DB_DIR:           $DB_DIR"
 echo "NCBI_DIR:         $NCBI_DIR"
 echo "Target Taxa:      ${TARGET_TAXA[*]}"
+echo "MAFFT Mode:       ${MAFFT_AMPLIFY_MODE:-cluster_dynamic.config 設定に従う (デフォルト: addfragments)}"
+echo "MaxAlign After:   ${MAXALIGN_AFTER:-cluster_dynamic.config 設定に従う (デフォルト: false)}"
 echo "TCS Evaluation:   有効 (taxonomy/<taxon> を使用して元/増幅後ツリーのTCSを自動算出)"
 echo "=============================================================================="
 
@@ -139,7 +147,7 @@ activate_env "biotools"
 # ------------------------------------------------------------------------------
 # 3. リソース設定ファイル (Nextflow Config: クラスタ全体分散)
 # ------------------------------------------------------------------------------
-CONFIG_FILE="$CONFIG_DIR/cluster_dynamic.config"
+CONFIG_FILE="${CONFIG_FILE:-$CONFIG_DIR/cluster_dynamic.config}"
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "[ERROR] 設定ファイルが見つかりません: $CONFIG_FILE" >&2
     exit 1
@@ -216,12 +224,14 @@ run_taxon() {
         --tmp_dir "/tmp/ampliphy_${USER:-citrusml2004}_${taxon}" \
         --max_depth 5 \
         --mafft_preset auto \
+        ${MAFFT_AMPLIFY_MODE:+--mafft_amplify_mode "$MAFFT_AMPLIFY_MODE"} \
+        ${MAXALIGN_AFTER:+--maxalign_after "$MAXALIGN_AFTER"} \
         --mad_script "$AMPLIPHY_DIR/bin/mad.py" \
         --tcs_script "$AMPLIPHY_DIR/bin/tcs.py" \
         -resume > "$nxf_log" 2>&1
 
     echo "AmpliPhy 完了: $taxon"
-    echo "  -> 増幅後MSA: $output_dir/msa/*.amp.fa"
+    echo "  -> 増幅後MSA: $output_dir/msa/*.amp.fa (MaxAlign適用時は *.maxaligned.fa も生成)"
     echo "  -> 系統樹:   $output_dir/tree/*.amp.nwk"
     echo "  -> TCSレポ:  $output_dir/report/amplified_tcs_report.tsv"
 }
