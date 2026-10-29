@@ -1,3 +1,27 @@
+最終更新: 2026-10-29 17:31
+
+## 📈 進捗状況
+- [x] 完了: Nextflow 設定への `cache = 'lenient'` 導入と `results_max/` 出力対応 (完了日: 10/29)
+- [ ] 進行中: スパコン上での最新コード取得と `run_ampliphy_denovo_maxalign.sh` 実行 (進捗率: 0% / 課題: スパコン上でのジョブ投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: ジョブの一時停止・再実行時に Lustre 上のタイムスタンプ更新等で `mmseqs_search` のキャッシュが無効化され、パイプラインが最初からやり直しになる現象を防ぎたい。また、成果物出力を `results_max/` に分離したい。
+- **[解決策]**:
+  1. **Lenient キャッシュの導入**: `configs/cluster_dynamic_denovo_maxalign.config` および `configs/cluster_dynamic.config` の `process` ブロックに `cache = 'lenient'` を追加。ファイル更新日時（mtime）の変化を無視し、ファイル名とファイルサイズのみで確実にキャッシュヒットを判定するように設定。
+  2. **出力先の新設**: `scripts/run_ampliphy_denovo_maxalign.sh` のデフォルト出力先を `results_max/` に変更し、`.gitignore` に `results_max/` を追加。
+- **[パラメータ]**: `process.cache = 'lenient'`, `RESULTS_BASE_DIR = results_max`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取得:
+   `git pull origin main`
+2. `de novo + MaxAlign` 専用スクリプトを実行:
+   `bsub < scripts/run_ampliphy_denovo_maxalign.sh`
+3. リアルタイムログで進捗を確認:
+   `tail -f logs/ampliphy/ampliphy_denovo_maxa_master.log`
+   （または各生物種別: `tail -f logs/ampliphy/nextflow_denovo_maxa_eukaryota.log`）
+
+---
+
 最終更新: 2026-10-28 15:48
 
 ## 📈 進捗状況

@@ -1,5 +1,6 @@
 ampliphy*
 results/
+results_max/
 results_gs/
 logs/
 mmseqs_db/

@@ -72,8 +72,8 @@ else
     DB_DIR="$HOME/mmseqs_db"
 fi
 
-# 成果物出力ベースディレクトリ (環境変数 RESULTS_DIR で上書き可能、未指定時は results/)
-RESULTS_BASE_DIR="${RESULTS_DIR:-$AMPLIPHY_ROOT/results}"
+# 成果物出力ベースディレクトリ (環境変数 RESULTS_DIR で上書き可能、未指定時は results_max/)
+RESULTS_BASE_DIR="${RESULTS_DIR:-$AMPLIPHY_ROOT/results_max}"
 
 # 必要なディレクトリ群を作成
 mkdir -p "$NCBI_DIR" "$CONFIG_DIR" "$AMPLIPHY_ROOT/logs/ampliphy" "$RESULTS_BASE_DIR"
@@ -302,6 +302,6 @@ fi
 echo ""
 echo "=============================================================================="
 echo "すべての AmpliPhy (de novo + MaxAlign) パイプライン実行が完了しました: $(date)"
-echo "各 results/<taxon>/ 配下に増幅後MSA (*.maxaligned.fa)、系統樹 (*.amp.nwk)、TCSレポートが揃いました。"
+echo "各 results_max/<taxon>/ 配下に増幅後MSA (*.maxaligned.fa)、系統樹 (*.amp.nwk)、TCSレポートが揃いました。"
 echo "続いて GS法評価 (bsub < scripts/run_gs_pipeline.sh) を実行できます。"
 echo "=============================================================================="
