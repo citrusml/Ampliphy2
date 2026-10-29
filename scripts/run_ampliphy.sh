@@ -220,7 +220,7 @@ run_taxon() {
         --database UniRef50 \
         --database_dir "$DB_DIR" \
         --threads 8 \
-        --mmseqs_options "--split-memory-limit 25G" \
+        --mmseqs_options "-e 1e-3 --split-memory-limit 25G" \
         --tmp_dir "/tmp/ampliphy_${USER:-citrusml2004}_${taxon}" \
         --max_depth 5 \
         --mafft_preset auto \
