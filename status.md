@@ -1,3 +1,28 @@
+最終更新: 2026-11-03 15:40
+
+## 📈 進捗状況
+- [x] 完了: Needleman-Wunsch フォールバックおよびパッケージ自動補完処理の削除、標準 Biopython 仕様への回帰 (完了日: 11/03)
+- [ ] 進行中: スパコン上での最新コード取得と `run_pwa_pipeline.sh` 再実行・評価 (進捗率: 0% / 課題: スパコン上でのジョブ投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: ユーザーの指示に基づき、独自実装したスタンドアロン Needleman-Wunsch フォールバックおよびスクリプト内のパッケージ自動補完（pip install）を撤廃し、環境本来の Biopython（`Bio.Align.PairwiseAligner`）に一本化する。
+- **[解決策]**:
+  1. `src/pwa_pipeline.py` から `BLOSUM62_*` 定義および `needleman_wunsch_align` 関数を完全に削除。
+  2. `compute_pwa_matrix` のグローバルアライメントを標準の `Bio.Align.PairwiseAligner` による実行に復元。
+  3. `scripts/run_pwa_pipeline.sh` 内の `pip install` チェック処理を削除。
+- **[パラメータ]**:
+  - `Bio.Align.PairwiseAligner`（mode='global', BLOSUM62, open=-11, extend=-1）
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取得:
+   `git pull origin main`
+2. PWAパイプラインを再投入:
+   `bsub < scripts/run_pwa_pipeline.sh`
+3. リアルタイムログで進捗を確認:
+   `tail -f logs/pwa/pwa_pipeline_master.log`
+
+---
+
 最終更新: 2026-11-03 15:35
 
 ## 📈 進捗状況

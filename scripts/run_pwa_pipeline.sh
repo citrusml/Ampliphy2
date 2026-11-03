@@ -111,12 +111,6 @@ activate_env() {
     fi
 
     set -u
-
-    # 必要なPythonパッケージ (biopython, pandas, scipy, numpy) の自動確認・補完
-    python3 -c "import Bio, pandas, scipy, numpy" 2>/dev/null || {
-        echo "[INFO] 必要なPythonパッケージ (biopython, pandas, scipy, numpy) をインストール中..."
-        pip install --quiet biopython pandas scipy numpy 2>/dev/null || true
-    }
 }
 
 activate_env "biotools"
