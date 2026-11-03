@@ -1,3 +1,38 @@
+最終更新: 2026-11-04 03:53
+
+## 📈 進捗状況
+- [x] 完了: `de novo` + `MaxAlignなし` 実行スクリプト `scripts/run_ampliphy_denovo.sh`、設定 `configs/cluster_dynamic_denovo.config`、および Nextflow パイプラインへの `impoverished_tree` 自動出力統合 (完了日: 11/04)
+- [ ] 進行中: NIGSC スパコン上での `run_ampliphy_denovo.sh` ジョブ投入・検証 (進捗率: 0% / 課題: スパコン上での実行)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: `mafft_amplify_mode = 'denovo'` かつ `maxalign_after = false`（MaxAlignなし）の条件で AmpliPhy を実行したい。また、実行開始時点から自動的に `impoverished_tree`（`msa_imp/*.imp.fa` および `tree_imp/*.imp.nwk`）と TCS 評価を出力するようにしたい。
+- **[解決策]**:
+  1. **専用 Config の作成 (`configs/cluster_dynamic_denovo.config`)**:
+     - `mafft_amplify_mode = 'denovo'`, `maxalign_after = false` を設定。
+     - `iqtree_inference` の `publishDir` を拡張し、`.ori.nwk` は `tree/` へ、`.imp.nwk` は `tree_imp/` へ自動配置する設定を追加（`cluster_dynamic.config` と `cluster_dynamic_denovo_maxalign.config` にも同様の `publishDir` 拡張を適用）。
+  2. **Nextflow パイプラインへの Impoverished Tree 統合 (`ampliphy/ampliphy.nf`, `configs/ampliphy_nf/`)**:
+     - `impoverished_msa` プロセス (`modules/impoverished_msa.nf`) を追加し、増幅 MSA から元配列のみを抽出・全ギャップ列を除去して `msa_imp/<hog>.imp.fa` を生成。
+     - `iqtree_inference` に `imp` チャンネルを合流させ、LSF クラスタ上で `ori` / `amp.unpruned` / `imp` の3系統樹を並列推定し、`tree_imp/<hog>.imp.nwk` に保存。
+     - `amplified_tcs` (`modules/amplified_tcs.nf`) を拡張し、`report/amplified_tcs_report.tsv` に `family_id`, `tcs_ori`, `tcs_amp`, `tcs_imp` の4列を出力。
+     - `.gitignore` で `ampliphy*` が除外されているため、Git追跡対象の `configs/ampliphy_nf/` に拡張モジュール一式を保持し、`run_ampliphy*.sh` 起動時に `$AMPLIPHY_DIR` へ自動同期する仕組みを導入。
+  3. **実行スクリプトの作成 (`scripts/run_ampliphy_denovo.sh`)**:
+     - デフォルト出力先を `results_denovo/<taxon>/` に設定（環境変数 `RESULTS_DIR` で変更可）。
+     - 万一キャッシュ再開等で `tree_imp/` に未生成分がある場合も、`run_impoverished_tree.sh` を自動呼び出しして補完する安全策を組み込み。
+- **[パラメータ]**: `mafft_amplify_mode = 'denovo'`, `maxalign_after = false`, `RESULTS_BASE_DIR = results_denovo`, `iqtree_options = '-m JTT+I+G4 -B 1000 -keep-ident'`
+
+## 🚀 次に行うこと (Next Actions)
+1. NIGSC で最新コードを取得:
+   `git pull origin main`
+2. `de novo + MaxAlignなし` パイプラインを投入:
+   - 全4生物種一括実行: `bsub < scripts/run_ampliphy_denovo.sh`
+   - 特定生物種のみ実行: `bash scripts/run_ampliphy_denovo.sh eukaryota`
+3. リアルタイムログで進捗を確認:
+   `tail -f logs/ampliphy/ampliphy_denovo_master.log`
+   （または生物種別: `tail -f logs/ampliphy/nextflow_denovo_eukaryota.log`）
+4. 出力された `results_denovo/<taxon>/tree_imp/*.imp.nwk` および `report/amplified_tcs_report.tsv` を確認。
+
+---
+
 最終更新: 2026-11-04 03:30
 
 ## 📈 進捗状況

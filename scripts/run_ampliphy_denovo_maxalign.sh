@@ -47,6 +47,18 @@ if [ ! -d "$AMPLIPHY_ROOT/ampliphy" ] && [ -d "$AMPLIPHY_SOURCE" ]; then
 fi
 AMPLIPHY_DIR="$AMPLIPHY_ROOT/ampliphy"
 
+# Git管理下の Nextflow 拡張モジュール (impoverished_msa 等) を AMPLIPHY_DIR へ自動同期
+if [ -d "$AMPLIPHY_ROOT/configs/ampliphy_nf" ] && [ -d "$AMPLIPHY_DIR" ]; then
+    cp -f "$AMPLIPHY_ROOT/configs/ampliphy_nf/ampliphy.nf" "$AMPLIPHY_DIR/ampliphy.nf"
+    mkdir -p "$AMPLIPHY_DIR/modules" "$AMPLIPHY_DIR/bin"
+    cp -f "$AMPLIPHY_ROOT/configs/ampliphy_nf/modules/"*.nf "$AMPLIPHY_DIR/modules/"
+    cp -f "$AMPLIPHY_ROOT/configs/ampliphy_nf/bin/"* "$AMPLIPHY_DIR/bin/" 2>/dev/null || true
+    if [ -f "$AMPLIPHY_ROOT/src/impoverished_tree.py" ]; then
+        cp -f "$AMPLIPHY_ROOT/src/impoverished_tree.py" "$AMPLIPHY_DIR/bin/ampliphy_impoverished_msa.py"
+    fi
+    chmod +x "$AMPLIPHY_DIR/bin/"* 2>/dev/null || true
+fi
+
 # MMseqs2 検索スクリプトのパッチ (Lustre共有ストレージ上でのmmapデッドロック防止: --db-load-mode 2 -> 0)
 if [ -f "$AMPLIPHY_DIR/bin/ampliphy_mmseqs_search.sh" ]; then
     sed -i 's/--db-load-mode 2/--db-load-mode 0/g' "$AMPLIPHY_DIR/bin/ampliphy_mmseqs_search.sh" 2>/dev/null || true
