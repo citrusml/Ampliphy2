@@ -1,3 +1,25 @@
+最終更新: 2026-11-04 03:30
+
+## 📈 進捗状況
+- [x] 完了: Impoverished tree 作成スクリプト `scripts/run_impoverished_tree.sh` と `src/impoverished_tree.py` の実装・ローカル疎通確認 (完了日: 11/04)
+- [ ] 進行中: NIGSC 上での実行 (進捗率: 0% / 課題: 未実行)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: results / results_max / results_pwa に Impoverished tree (元配列のみで再推定した木) が無い。
+- **[解決策]**:
+  - results, results_max: enrich 木に使われた MSA を自動選択 (maxaligned > after.maxaligned > amp) → 元配列のみ抽出・全ギャップ列除去 → `msa_imp/<hog>.imp.fa` → IQ-TREE (`-m JTT+I+G4 -B 1000 -keep-ident`, 未ルート) → `tree_imp/<hog>.imp.nwk`。
+  - results_pwa (global/local): `matrix/<hog>.amp.phy` から元配列の部分行列 `<hog>.imp.phy` を作り panjep NJ → `tree_imp/`。panjep 手法は距離行列が無いため対象外。global は距離が配列の有無に依存しないため ori 木と一致する想定。
+  - 既存出力は上書きせずスキップ (再実行可)。エラーは `logs/imp/` に保存。
+- **[パラメータ]**: `PARALLEL_JOBS=4`, `IQTREE_THREADS=4`, `#BSUB -n 16 -W 72:00`
+
+## 🚀 次に行うこと (Next Actions)
+1. NIGSC で `git pull origin main`
+2. `mkdir -p logs/imp && RESULT_ROOTS="results_max" bash scripts/run_impoverished_tree.sh eukaryota` で小規模確認
+3. 問題なければ `bsub < scripts/run_impoverished_tree.sh`
+4. `ls results_max/eukaryota/tree_imp | wc -l` が HOG 数と一致するか確認
+
+---
+
 最終更新: 2026-11-03 16:25
 
 ## 📈 進捗状況
