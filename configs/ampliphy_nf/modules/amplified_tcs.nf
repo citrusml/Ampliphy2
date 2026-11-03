@@ -18,3 +18,4 @@ process amplified_tcs {
         printf '%s\\t%s\\t%s\\t%s\\n' '${id}' "\${TCS_ORI}" "\${TCS_AMP}" "\${TCS_IMP}" > ${id}.tcs.tsv
         """
 }
+

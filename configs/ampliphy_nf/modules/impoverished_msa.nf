@@ -15,3 +15,4 @@ process impoverished_msa {
         ampliphy_impoverished_msa.py msa --msa "${amp_msa}" --ori "${ori_msa}" --out "${id}.imp.fa"
         """
 }
+

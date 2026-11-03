@@ -38,3 +38,4 @@ process iqtree_inference {
         cp ${id}.${tree_type}.treefile ${id}.${tree_type}.nwk
         """
 }
+
