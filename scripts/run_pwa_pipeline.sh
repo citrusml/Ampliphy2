@@ -204,6 +204,11 @@ echo "AMPLIPHY_ROOT:    $AMPLIPHY_ROOT"
 echo "Target Taxa:      ${TARGET_TAXA[*]}"
 echo "Target Methods:   ${TARGET_METHODS[*]}"
 echo "panjep Bin:       $PANJEP_BIN"
+if python3 -c "import Bio" 2>/dev/null; then
+    echo "Biopython:        利用可能 (Bio.Align.PairwiseAligner を優先使用)"
+else
+    echo "Biopython:        未検出 (内蔵 Gotoh Needleman-Wunsch を使用)"
+fi
 echo "=============================================================================="
 
 # ------------------------------------------------------------------------------
@@ -303,47 +308,58 @@ generate_lineage_tsv('$taxa_tsv', fastas, '$lineage_tsv')
         # 2. 系統樹推定 (ori & amp)
         local ori_nwk="$tree_ori_dir/${hog_id}.ori.nwk"
         local amp_nwk="$tree_amp_dir/${hog_id}.amp.nwk"
+        local err_log="$out_dir/error_${hog_id}.log"
+        rm -f "$err_log"
 
         if [ "$method" = "panjep" ]; then
             # panjep -d poisson による直接推定
-            "$PANJEP_BIN" -t 4 -d poisson -e 0 "$ori_fa" > "$ori_nwk" 2>/dev/null || true
-            "$PANJEP_BIN" -t 4 -d poisson -e 0 "$amp_fa" > "$amp_nwk" 2>/dev/null || true
+            "$PANJEP_BIN" -t 4 -d poisson -e 0 "$ori_fa" > "$ori_nwk" 2>"$err_log" || true
+            "$PANJEP_BIN" -t 4 -d poisson -e 0 "$amp_fa" > "$amp_nwk" 2>>"$err_log" || true
 
         elif [ "$method" = "global" ]; then
             # Needleman-Wunsch グローバルアラインメント + 補正ポアソン距離 (ver2)
             local ori_phy="$matrix_dir/${hog_id}.ori.phy"
             local amp_phy="$matrix_dir/${hog_id}.amp.phy"
 
-            python3 -m src.pwa_pipeline matrix "$ori_fa" "$ori_phy" --method ver2 -t 4 >/dev/null 2>&1 || true
-            python3 -m src.pwa_pipeline matrix "$amp_fa" "$amp_phy" --method ver2 -t 4 >/dev/null 2>&1 || true
+            python3 -m src.pwa_pipeline matrix "$ori_fa" "$ori_phy" --method ver2 -t 4 2>"$err_log" || true
+            python3 -m src.pwa_pipeline matrix "$amp_fa" "$amp_phy" --method ver2 -t 4 2>>"$err_log" || true
 
-            if [ -s "$ori_phy" ]; then
-                "$PANJEP_BIN" -t 4 "$ori_phy" > "$ori_nwk" 2>/dev/null || true
+            if [ ! -s "$ori_phy" ] || [ ! -s "$amp_phy" ]; then
+                local err_msg
+                err_msg=$(tail -n 1 "$err_log" 2>/dev/null || echo "行列作成失敗")
+                echo " [スキップ: 距離行列作成失敗 - $err_msg]"
+                continue
             fi
-            if [ -s "$amp_phy" ]; then
-                "$PANJEP_BIN" -t 4 "$amp_phy" > "$amp_nwk" 2>/dev/null || true
-            fi
+
+            "$PANJEP_BIN" -t 4 "$ori_phy" > "$ori_nwk" 2>"$err_log" || true
+            "$PANJEP_BIN" -t 4 "$amp_phy" > "$amp_nwk" 2>>"$err_log" || true
 
         elif [ "$method" = "local" ]; then
             # MMseqs2 局所アラインメント + 補正ポアソン距離 (ver3)
             local ori_phy="$matrix_dir/${hog_id}.ori.phy"
             local amp_phy="$matrix_dir/${hog_id}.amp.phy"
 
-            python3 -m src.pwa_pipeline matrix "$ori_fa" "$ori_phy" --method ver3 -t 4 >/dev/null 2>&1 || true
-            python3 -m src.pwa_pipeline matrix "$amp_fa" "$amp_phy" --method ver3 -t 4 >/dev/null 2>&1 || true
+            python3 -m src.pwa_pipeline matrix "$ori_fa" "$ori_phy" --method ver3 -t 4 2>"$err_log" || true
+            python3 -m src.pwa_pipeline matrix "$amp_fa" "$amp_phy" --method ver3 -t 4 2>>"$err_log" || true
 
-            if [ -s "$ori_phy" ]; then
-                "$PANJEP_BIN" -t 4 "$ori_phy" > "$ori_nwk" 2>/dev/null || true
+            if [ ! -s "$ori_phy" ] || [ ! -s "$amp_phy" ]; then
+                local err_msg
+                err_msg=$(tail -n 1 "$err_log" 2>/dev/null || echo "行列作成失敗")
+                echo " [スキップ: 距離行列作成失敗 - $err_msg]"
+                continue
             fi
-            if [ -s "$amp_phy" ]; then
-                "$PANJEP_BIN" -t 4 "$amp_phy" > "$amp_nwk" 2>/dev/null || true
-            fi
+
+            "$PANJEP_BIN" -t 4 "$ori_phy" > "$ori_nwk" 2>"$err_log" || true
+            "$PANJEP_BIN" -t 4 "$amp_phy" > "$amp_nwk" 2>>"$err_log" || true
         fi
 
         if [ ! -s "$ori_nwk" ] || [ ! -s "$amp_nwk" ]; then
-            echo " [スキップ: 系統樹出力が空]"
+            local err_msg
+            err_msg=$(tail -n 1 "$err_log" 2>/dev/null || echo "系統樹出力が空")
+            echo " [スキップ: 系統樹出力が空 - $err_msg]"
             continue
         fi
+        rm -f "$err_log"
 
         # 3. 負の枝長のクリーニング (NJ法で稀に生じる負の枝長を :0.0 に置換)
         python3 -m src.pwa_pipeline clean-tree "$ori_nwk" >/dev/null 2>&1 || true

@@ -1,3 +1,34 @@
+最終更新: 2026-11-03 16:15
+
+## 📈 進捗状況
+- [x] 完了: 系統樹出力が空になる問題の原因究明と Gotoh Needleman-Wunsch（BLOSUM62 アフィンギャップ）実装、エラー可視化の強化 (完了日: 11/03)
+- [ ] 進行中: スパコン上での最新コード取得と `run_pwa_pipeline.sh` 再実行・評価 (進捗率: 0% / 課題: スパコン上でのジョブ投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: スパコン上で `global` 手法を実行した際、全HOGにおいて `[スキップ: 系統樹出力が空]` となり処理が進まない現象が発生。
+- **[解決策]**:
+  1. **原因の特定**:
+     - `biotools` 環境に `biopython` がインストールされていないため、`matrix` サブコマンド実行時に `ModuleNotFoundError: No module named 'Bio'` が発生していた。
+     - エラー出力が `/dev/null` に捨てられていたため、行列ファイル（`.phy`）が生成されず、`panjep` が実行されずに Newick ファイルが空となっていた。
+  2. **Gotoh アルゴリズム（アフィンギャップペナルティ対応）による Needleman-Wunsch 実装**:
+     - `biopython` の `PairwiseAligner`（mode='global', BLOSUM62, open=-11, extend=-1）と 100% 一致するスコア・アライメントを出力する Gotoh NW アルゴリズム（`gotoh_needleman_wunsch`）を純粋 Python（外部依存ゼロ）で実装。
+     - `Bio` が利用可能な場合は Biopython を優先使用し、未インストールの環境（`biotools` 等）でも依存エラーなく完全自律動作可能に改修。
+  3. **エラー可視化と診断性の強化**:
+     - シェルスクリプト内のコマンド出力を `/dev/null` に丸め込む処理を廃止し、エラー発生時は最後のエラーメッセージ（`ModuleNotFoundError` やコマンド異常終了など）をリアルタイムログに出力・保存するように改善。
+- **[パラメータ]**:
+  - `Gotoh Needleman-Wunsch`: タンパク質 BLOSUM62 (open: -11, extend: -1), 塩基 (match: 1, mismatch: -3, open: -5, extend: -2)
+  - Biopython 互換 100%
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取得:
+   `git pull origin main`
+2. PWAパイプラインを再投入:
+   `bsub < scripts/run_pwa_pipeline.sh`
+3. リアルタイムログで進捗を確認:
+   `tail -f logs/pwa/pwa_pipeline_master.log`
+
+---
+
 最終更新: 2026-11-03 15:40
 
 ## 📈 進捗状況
