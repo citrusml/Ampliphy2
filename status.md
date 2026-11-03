@@ -1,3 +1,35 @@
+最終更新: 2026-11-03 15:35
+
+## 📈 進捗状況
+- [x] 完了: スパコンジョブ（Job 263746）の終了エラー修正とスタンドアロンNW実装、GitHubプッシュ (完了日: 11/03)
+- [ ] 進行中: スパコン上での最新コード取得と `run_pwa_pipeline.sh` 再実行・評価 (進捗率: 0% / 課題: スパコン上でのジョブ投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: スパコン上で `bsub < scripts/run_pwa_pipeline.sh`（Job 263746）を実行した際、eukaryota globalの開始直後に `Exit code 1` で異常終了した。
+- **[解決策]**:
+  1. **Bash `set -e` と `((count++))` の衝突解消**:
+     - `set -euo pipefail` 下で Bash の算術式 `((count++))` は初期値 0 を評価して終了ステータス 1 を返し、スクリプトが即座に強制終了していた。
+     - 安全な `count=$((count + 1))` および `success_count=$((success_count + 1))` に修正。
+  2. **Python `SyntaxError` の解消と awk による高速・堅牢な集計**:
+     - TCSスコアの Delta / Ratio 計算において、Bash の二重引用符内 `\n` が Python 実行時に `SyntaxError` を引き起こすリスクを排除。
+     - 単一の `awk` コマンドにより高速かつ例外フリーで安全に Delta と Ratio を計算するように刷新。
+  3. **Biopython 未導入環境への堅牢なフォールバック**:
+     - `biotools` 環境に Biopython が存在しない場合でも動作するよう、純粋 Python の Needleman-Wunsch（BLOSUM62 行列対応）フォールバックを `src/pwa_pipeline.py` に実装。併せてスクリプト内で必要なパッケージをサイレントに補完確認する処理を追加。
+- **[パラメータ]**:
+  - `set -euo pipefail` 準拠、`awk` による Delta/Ratio 計算、スタンドアロン BLOSUM62 Needleman-Wunsch 実装
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取得:
+   `git pull origin main`
+2. PWAパイプラインを再投入:
+   `bsub < scripts/run_pwa_pipeline.sh`
+3. リアルタイムログで進捗を確認:
+   `tail -f logs/pwa/pwa_pipeline_master.log`
+4. 完了後、サマリーを確認:
+   `cat results_pwa/overall_comparison_summary.tsv`
+
+---
+
 最終更新: 2026-11-03 14:38
 
 ## 📈 進捗状況
