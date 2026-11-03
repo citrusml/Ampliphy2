@@ -1,3 +1,36 @@
+最終更新: 2026-11-04 05:40
+
+## 📈 進捗状況
+- [x] 完了: `impoverished_msa` の引数エラー（`--msa --ori --out`）および `mafft_mode` 未定義警告の修正・テスト通過 (完了日: 11/04)
+- [ ] 進行中: NIGSC スパコン上での `git pull` と `run_ampliphy_denovo.sh` 再実行 (進捗率: 0% / 課題: スパコン上でのジョブ再開)
+
+## 🛠 技術的決定・メモ
+- **[課題]**:
+  1. `Process 'impoverished_msa (1)' terminated with an error exit status (2)`:
+     `ampliphy_impoverished_msa.py: error: unrecognized arguments: --msa --ori --out`
+     Nextflow モジュール側がオプションフラグ形式で引数を渡していたのに対し、Python スクリプト側が位置引数のみ受け付ける仕様だったためパースエラーが発生。
+  2. `WARN: Access to undefined parameter 'mafft_mode'`:
+     `mafft_amplify.nf` のフォールバック評価で `params.mafft_mode` が未定義だったため警告が出力。
+- **[解決策]**:
+  1. **柔軟な引数パーサーへの改修 (`src/impoverished_tree.py`)**:
+     `msa` サブコマンドにおいて、位置引数 (`msa amp.fa ori.fa out.fa`) とオプション引数 (`--msa amp.fa --ori ori.fa --out out.fa`) のどちらの形式でも完全対応できるように拡張。
+  2. **Nextflow モジュールの標準化 (`modules/impoverished_msa.nf`)**:
+     位置引数形式 (`ampliphy_impoverished_msa.py msa "${amp_msa}" "${ori_msa}" "${id}.imp.fa"`) でシンプルに呼び出すよう修正。
+  3. **Config でのパラメータ定義**:
+     `configs/cluster_dynamic*.config` に `mafft_mode` を明示的に初期化追加し、Nextflow の警告を解消。
+- **[パラメータ]**: `impoverished_tree.py msa [msa] [ori] [out]` (フラグ `--msa`, `--ori`, `--out` 両対応)
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取得:
+   `git pull origin main`
+2. `results_denovo` のジョブを再開:
+   `bsub < scripts/run_ampliphy_denovo.sh`
+   （Nextflow の `-resume` により、完了済みの MAFFT や MMseqs2 検索結果はキャッシュ利用され、`impoverished_msa` から即座に再開されます）
+3. リアルタイムログで進捗を確認:
+   `tail -f logs/ampliphy/ampliphy_denovo_master.log`
+
+---
+
 最終更新: 2026-11-04 03:53
 
 ## 📈 進捗状況

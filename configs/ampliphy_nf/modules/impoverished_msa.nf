@@ -12,7 +12,7 @@ process impoverished_msa {
 
     script:
         """
-        ampliphy_impoverished_msa.py msa --msa "${amp_msa}" --ori "${ori_msa}" --out "${id}.imp.fa"
+        ampliphy_impoverished_msa.py msa "${amp_msa}" "${ori_msa}" "${id}.imp.fa"
         """
 }
 

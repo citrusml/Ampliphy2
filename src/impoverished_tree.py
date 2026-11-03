@@ -178,9 +178,12 @@ def main() -> None:
     p_sel.add_argument("hog_id")
 
     p_msa = sub.add_parser("msa", help="Build impoverished MSA")
-    p_msa.add_argument("msa")
-    p_msa.add_argument("ori_fasta")
-    p_msa.add_argument("out_fasta")
+    p_msa.add_argument("msa_pos", nargs="?", default=None, help="Amplified MSA path")
+    p_msa.add_argument("ori_pos", nargs="?", default=None, help="Original MSA path")
+    p_msa.add_argument("out_pos", nargs="?", default=None, help="Output path")
+    p_msa.add_argument("--msa", default=None, help="Amplified MSA path (flag)")
+    p_msa.add_argument("--ori", default=None, help="Original MSA path (flag)")
+    p_msa.add_argument("--out", default=None, help="Output path (flag)")
 
     p_mat = sub.add_parser("matrix", help="Subset PHYLIP matrix to original IDs")
     p_mat.add_argument("amp_phy")
@@ -194,11 +197,16 @@ def main() -> None:
             sys.exit(1)
         print(path)
     elif args.command == "msa":
-        n, length = make_impoverished_msa(args.msa, args.ori_fasta, args.out_fasta)
+        msa_path = args.msa or args.msa_pos
+        ori_path = args.ori or args.ori_pos
+        out_path = args.out or args.out_pos
+        if not (msa_path and ori_path and out_path):
+            p_msa.error("msa requires msa, ori, and out paths (either positional or as flags)")
+        n, length = make_impoverished_msa(msa_path, ori_path, out_path)
         if n == 0:
             print("No original sequences found in MSA", file=sys.stderr)
             sys.exit(1)
-        print(f"{n} seqs x {length} cols -> {args.out_fasta}")
+        print(f"{n} seqs x {length} cols -> {out_path}")
     elif args.command == "matrix":
         ids = {r[0] for r in parse_fasta(args.ori_fasta)}
         n = subset_phylip_matrix(args.amp_phy, ids, args.out_phy)
