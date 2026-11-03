@@ -117,6 +117,18 @@ activate_env "biotools"
 export PYTHONUNBUFFERED=1
 export PYTHONPATH="$AMPLIPHY_ROOT:${PYTHONPATH:-}"
 
+# biotools 環境の Python パッケージ確認（biopython, pandas 等が未導入の場合は導入）
+if ! python3 -c "import Bio" &>/dev/null; then
+    echo "[INFO] biotools 環境に biopython が検出されませんでした。インストールを実行します..."
+    if command -v micromamba &>/dev/null; then
+        micromamba install -n biotools biopython pandas scipy numpy -c conda-forge -y 2>/dev/null || pip install biopython pandas scipy numpy 2>/dev/null || true
+    elif command -v conda &>/dev/null; then
+        conda install -n biotools biopython pandas scipy numpy -c conda-forge -y 2>/dev/null || pip install biopython pandas scipy numpy 2>/dev/null || true
+    else
+        pip install biopython pandas scipy numpy 2>/dev/null || true
+    fi
+fi
+
 # ------------------------------------------------------------------------------
 # 3. 必要ツールの検出と準備
 # ------------------------------------------------------------------------------
@@ -205,9 +217,10 @@ echo "Target Taxa:      ${TARGET_TAXA[*]}"
 echo "Target Methods:   ${TARGET_METHODS[*]}"
 echo "panjep Bin:       $PANJEP_BIN"
 if python3 -c "import Bio" 2>/dev/null; then
-    echo "Biopython:        利用可能 (Bio.Align.PairwiseAligner を優先使用)"
+    echo "Biopython:        利用可能 ($(python3 -c 'import Bio; print(Bio.__version__)' 2>/dev/null))"
 else
-    echo "Biopython:        未検出 (内蔵 Gotoh Needleman-Wunsch を使用)"
+    echo "[WARNING] Biopython が未検出です。global アライメント実行には biotools への biopython インストールが必要です:"
+    echo "          micromamba install -n biotools biopython pandas scipy numpy -c conda-forge -y"
 fi
 echo "=============================================================================="
 

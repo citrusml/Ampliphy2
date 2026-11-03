@@ -1,3 +1,30 @@
+最終更新: 2026-11-03 16:25
+
+## 📈 進捗状況
+- [x] 完了: biotools 環境への biopython 導入方針に統一、コードを標準 Biopython 仕様に整備 (完了日: 11/03)
+- [ ] 進行中: スパコン上での biotools 環境への biopython インストールとジョブ再実行 (進捗率: 0% / 課題: スパコン上でのジョブ投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: ユーザーの指示に基づき、内蔵 Gotoh NW ではなく `biotools` 仮想環境に `biopython` を直接導入し、標準の `Bio.Align.PairwiseAligner` を用いて一貫してアライメントを行う方針に統一する。
+- **[解決策]**:
+  1. `src/pwa_pipeline.py` を標準の `Bio.Align.PairwiseAligner` によるグローバルアライメント（BLOSUM62 行列、ギャップオープン -11、エクステンド -1）に統一。
+  2. `scripts/run_pwa_pipeline.sh` 内で `biotools` 環境の `biopython` の存在を確認し、未検出時は `micromamba install -n biotools biopython pandas scipy numpy -c conda-forge -y` を自動試行するフォールバックを配置。
+  3. スパコン上で事前に手動インストールできるように具体的な導入コマンドを提示。
+- **[パラメータ]**:
+  - `Bio.Align.PairwiseAligner` (mode='global', BLOSUM62, open=-11, extend=-1)
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコンのログインノードで `biotools` 環境に `biopython` 等をインストール:
+   `micromamba install -n biotools biopython pandas scipy numpy -c conda-forge -y`
+2. 最新コードを取得:
+   `git pull origin main`
+3. PWAパイプラインを再投入:
+   `bsub < scripts/run_pwa_pipeline.sh`
+4. リアルタイムログで進捗を確認:
+   `tail -f logs/pwa/pwa_pipeline_master.log`
+
+---
+
 最終更新: 2026-11-03 16:15
 
 ## 📈 進捗状況
