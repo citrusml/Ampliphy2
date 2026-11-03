@@ -304,6 +304,113 @@ def run_mmseqs_local(
     return best_alns
 
 
+# BLOSUM62 matrix for fallback standalone Needleman-Wunsch alignment
+BLOSUM62_AA = "ARNDCQEGHILKMFPSTWYVBZX*"
+BLOSUM62_SCORES = [
+    [ 4,-1,-2,-2, 0,-1,-1, 0,-2,-1,-1,-1,-1,-2,-1, 1, 0,-3,-2, 0,-2,-1, 0,-4],
+    [-1, 5, 0,-2,-3, 1, 0,-2, 0,-3,-2, 2,-1,-3,-2,-1,-1,-3,-2,-3,-1, 0,-1,-4],
+    [-2, 0, 6, 1,-3, 0, 0, 0, 1,-3,-3, 0,-2,-3,-2, 1, 0,-4,-2,-3, 3, 0,-1,-4],
+    [-2,-2, 1, 6,-3, 0, 2,-1,-1,-3,-4,-1,-3,-3,-1, 0,-1,-4,-3,-3, 4, 1,-1,-4],
+    [ 0,-3,-3,-3, 9,-3,-4,-3,-3,-1,-1,-3,-1,-2,-3,-1,-1,-2,-2,-1,-3,-3,-2,-4],
+    [-1, 1, 0, 0,-3, 5, 2,-2, 0,-3,-2, 1, 0,-3,-1, 0,-1,-2,-1,-2, 0, 3,-1,-4],
+    [-1, 0, 0, 2,-4, 2, 5,-2, 0,-3,-3, 1,-2,-3,-1, 0,-1,-3,-2,-2, 1, 4,-1,-4],
+    [ 0,-2, 0,-1,-3,-2,-2, 6,-2,-4,-4,-2,-3,-3,-2, 0,-2,-2,-3,-3,-1,-2,-1,-4],
+    [-2, 0, 1,-1,-3, 0, 0,-2, 8,-3,-3,-1,-2,-1,-2,-1,-2,-2, 2,-3, 0, 0,-1,-4],
+    [-1,-3,-3,-3,-1,-3,-3,-4,-3, 4, 2,-3, 1, 0,-3,-2,-1,-3,-1, 3,-3,-3,-1,-4],
+    [-1,-2,-3,-4,-1,-2,-3,-4,-3, 2, 4,-2, 2, 0,-3,-2,-1,-2,-1, 1,-4,-3,-1,-4],
+    [-1, 2, 0,-1,-3, 1, 1,-2,-1,-3,-2, 5,-1,-3,-1, 0,-1,-3,-2,-2, 0, 1,-1,-4],
+    [-1,-1,-2,-3,-1, 0,-2,-3,-2, 1, 2,-1, 5, 0,-2,-1,-1,-1,-1, 1,-3,-1,-1,-4],
+    [-2,-3,-3,-3,-2,-3,-3,-3,-1, 0, 0,-3, 0, 6,-4,-2,-2, 1, 3,-1,-3,-3,-1,-4],
+    [-1,-2,-2,-1,-3,-1,-1,-2,-2,-3,-3,-1,-2,-4, 7,-1,-1,-4,-3,-2,-2,-1,-2,-4],
+    [ 1,-1, 1, 0,-1, 0, 0, 0,-1,-2,-2, 0,-1,-2,-1, 4, 1,-3,-2,-2, 0, 0, 0,-4],
+    [ 0,-1, 0,-1,-1,-1,-1,-2,-2,-1,-1,-1,-1,-2,-1, 1, 5,-2,-2, 0,-1,-1, 0,-4],
+    [-3,-3,-4,-4,-2,-2,-3,-2,-2,-3,-2,-3,-1, 1,-4,-3,-2,11, 2,-3,-4,-3,-2,-4],
+    [-2,-2,-2,-3,-2,-1,-2,-3, 2,-1,-1,-2,-1, 3,-3,-2,-2, 2, 7,-1,-3,-2,-1,-4],
+    [ 0,-3,-3,-3,-1,-2,-2,-3,-3, 3, 1,-2, 1,-1,-2,-2, 0,-3,-1, 4,-3,-2,-1,-4],
+    [-2,-1, 3, 4,-3, 0, 1,-1, 0,-3,-4, 0,-3,-3,-2, 0,-1,-4,-3,-3, 4, 1,-1,-4],
+    [-1, 0, 0, 1,-3, 3, 4,-2, 0,-3,-3, 1,-1,-3,-1, 0,-1,-3,-2,-2, 1, 4,-1,-4],
+    [ 0,-1,-1,-1,-2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-2, 0, 0,-2,-1,-1,-1,-1,-1,-4],
+    [-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4,-4, 1],
+]
+BLOSUM62_MAP = {c: i for i, c in enumerate(BLOSUM62_AA)}
+
+
+def needleman_wunsch_align(
+    s1: str, s2: str, is_nucleotide: bool = False, gap_open: int = -11, gap_extend: int = -1
+) -> Tuple[str, str]:
+    """
+    Standalone fallback Needleman-Wunsch global alignment.
+
+    Parameters
+    ----------
+    s1 : str
+        First sequence string.
+    s2 : str
+        Second sequence string.
+    is_nucleotide : bool, default=False
+        True if nucleotide.
+    gap_open : int, default=-11
+        Gap open penalty.
+    gap_extend : int, default=-1
+        Gap extend penalty.
+
+    Returns
+    -------
+    aligned_s1, aligned_s2 : Tuple[str, str]
+        Pair of aligned sequence strings.
+    """
+    n, m = len(s1), len(s2)
+    if n == 0 and m == 0:
+        return "", ""
+    if n == 0:
+        return "-" * m, s2
+    if m == 0:
+        return s1, "-" * n
+
+    gap_penalty = gap_open  # linear approximation for robust fast fallback
+    dp = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n + 1):
+        dp[i][0] = i * gap_penalty
+    for j in range(m + 1):
+        dp[0][j] = j * gap_penalty
+
+    if is_nucleotide:
+        def score_fn(a: str, b: str) -> int:
+            return 1 if a.upper() == b.upper() else -3
+    else:
+        def score_fn(a: str, b: str) -> int:
+            ia = BLOSUM62_MAP.get(a.upper(), 22)
+            ib = BLOSUM62_MAP.get(b.upper(), 22)
+            return BLOSUM62_SCORES[ia][ib]
+
+    for i in range(1, n + 1):
+        c1 = s1[i - 1]
+        for j in range(1, m + 1):
+            c2 = s2[j - 1]
+            s = score_fn(c1, c2)
+            dp[i][j] = max(dp[i - 1][j - 1] + s, dp[i - 1][j] + gap_penalty, dp[i][j - 1] + gap_penalty)
+
+    i, j = n, m
+    a1, a2 = [], []
+    while i > 0 or j > 0:
+        s = score_fn(s1[i - 1], s2[j - 1]) if (i > 0 and j > 0) else -9999
+        if i > 0 and j > 0 and dp[i][j] == dp[i - 1][j - 1] + s:
+            a1.append(s1[i - 1])
+            a2.append(s2[j - 1])
+            i -= 1
+            j -= 1
+        elif i > 0 and dp[i][j] == dp[i - 1][j] + gap_penalty:
+            a1.append(s1[i - 1])
+            a2.append("-")
+            i -= 1
+        else:
+            a1.append("-")
+            a2.append(s2[j - 1])
+            j -= 1
+
+    return "".join(reversed(a1)), "".join(reversed(a2))
+
+
 def compute_pwa_matrix(
     fasta_path: Union[str, Path],
     method: str = "ver2",
@@ -346,28 +453,39 @@ def compute_pwa_matrix(
     matrix = [[0.0 if i == j else 5.0 for j in range(n)] for i in range(n)]
 
     if method in ("ver1", "ver2"):
-        # Global pairwise alignment via Bio.Align.PairwiseAligner
-        from Bio.Align import PairwiseAligner, substitution_matrices
-
-        aligner = PairwiseAligner()
-        aligner.mode = "global"
-        if is_nucl:
-            aligner.match_score = 1.0
-            aligner.mismatch_score = -3.0
-            aligner.open_gap_score = -5.0
-            aligner.extend_gap_score = -2.0
-        else:
-            aligner.substitution_matrix = substitution_matrices.load("BLOSUM62")
-            aligner.open_gap_score = -11.0
-            aligner.extend_gap_score = -1.0
+        # Global pairwise alignment
+        use_biopython = False
+        aligner = None
+        try:
+            from Bio.Align import PairwiseAligner, substitution_matrices
+            aligner = PairwiseAligner()
+            aligner.mode = "global"
+            if is_nucl:
+                aligner.match_score = 1.0
+                aligner.mismatch_score = -3.0
+                aligner.open_gap_score = -5.0
+                aligner.extend_gap_score = -2.0
+            else:
+                aligner.substitution_matrix = substitution_matrices.load("BLOSUM62")
+                aligner.open_gap_score = -11.0
+                aligner.extend_gap_score = -1.0
+            use_biopython = True
+        except ImportError:
+            use_biopython = False
 
         for i in range(n):
             for j in range(i + 1, n):
                 s1 = seq_dict[seq_ids[i]]
                 s2 = seq_dict[seq_ids[j]]
-                alns = aligner.align(s1, s2)
-                best_aln = alns[0]
-                d = calculate_poisson_distance(best_aln[0], best_aln[1], is_nucleotide=is_nucl, method=method)
+                if use_biopython and aligner is not None:
+                    alns = aligner.align(s1, s2)
+                    best_aln = alns[0]
+                    aln1, aln2 = best_aln[0], best_aln[1]
+                else:
+                    aln1, aln2 = needleman_wunsch_align(s1, s2, is_nucleotide=is_nucl)
+                d = calculate_poisson_distance(aln1, aln2, is_nucleotide=is_nucl, method=method)
+                matrix[i][j] = d
+                matrix[j][i] = d
                 matrix[i][j] = d
                 matrix[j][i] = d
 

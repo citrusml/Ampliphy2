@@ -111,9 +111,16 @@ activate_env() {
     fi
 
     set -u
+
+    # 必要なPythonパッケージ (biopython, pandas, scipy, numpy) の自動確認・補完
+    python3 -c "import Bio, pandas, scipy, numpy" 2>/dev/null || {
+        echo "[INFO] 必要なPythonパッケージ (biopython, pandas, scipy, numpy) をインストール中..."
+        pip install --quiet biopython pandas scipy numpy 2>/dev/null || true
+    }
 }
 
 activate_env "biotools"
+export PYTHONUNBUFFERED=1
 export PYTHONPATH="$AMPLIPHY_ROOT:${PYTHONPATH:-}"
 
 # ------------------------------------------------------------------------------
@@ -287,7 +294,7 @@ generate_lineage_tsv('$taxa_tsv', fastas, '$lineage_tsv')
     local success_count=0
 
     for ori_fa in "${orig_files[@]}"; do
-        ((count++))
+        count=$((count + 1))
         local filename
         filename=$(basename "$ori_fa")
         local hog_id="${filename%.*}"
@@ -297,7 +304,7 @@ generate_lineage_tsv('$taxa_tsv', fastas, '$lineage_tsv')
         # 1. ホモログ配列とマージして amp.fa を作成
         local hom_fa="$hom_dir/${hog_id}.homologs.fa"
         local amp_fa="$amp_dir/${hog_id}.amp.fa"
-        python3 -m src.pwa_pipeline merge "$ori_fa" "$hom_fa" "$amp_fa" >/dev/null 2>&1
+        python3 -m src.pwa_pipeline merge "$ori_fa" "$hom_fa" "$amp_fa" >/dev/null 2>&1 || true
 
         # 2. 系統樹推定 (ori & amp)
         local ori_nwk="$tree_ori_dir/${hog_id}.ori.nwk"
@@ -388,26 +395,24 @@ generate_lineage_tsv('$taxa_tsv', fastas, '$lineage_tsv')
         local tcs_ori="0.0"
         local tcs_amp="0.0"
         if [ -s "$lineage_tsv" ]; then
-            tcs_ori=$(python3 "$TCS_PY" "$ori_rooted" "$lineage_tsv" 2>/dev/null | cut -f2 || echo "0.0")
-            tcs_amp=$(python3 "$TCS_PY" "$amp_pruned" "$lineage_tsv" 2>/dev/null | cut -f2 || echo "0.0")
+            tcs_ori=$(python3 "$TCS_PY" "$ori_rooted" "$lineage_tsv" 2>/dev/null | cut -f2) || tcs_ori="0.0"
+            tcs_amp=$(python3 "$TCS_PY" "$amp_pruned" "$lineage_tsv" 2>/dev/null | cut -f2) || tcs_amp="0.0"
         fi
 
-        # 数値妥当性チェック
-        tcs_ori=$(python3 -c "try: print(f'{float(\"$tcs_ori\"):.6f}')\nexcept: print('0.000000')")
-        tcs_amp=$(python3 -c "try: print(f'{float(\"$tcs_amp\"):.6f}')\nexcept: print('0.000000')")
+        # 数値妥当性チェックと delta / ratio の計算 (awk で安全・高速に計算)
+        local delta="0.000000"
+        local ratio="nan"
+        read -r delta ratio <<< $(awk -v o="${tcs_ori:-0.0}" -v a="${tcs_amp:-0.0}" 'BEGIN {
+            vo = (o ~ /^[0-9]+(\.[0-9]+)?$/) ? o + 0.0 : 0.0;
+            va = (a ~ /^[0-9]+(\.[0-9]+)?$/) ? a + 0.0 : 0.0;
+            d = va - vo;
+            r = (vo > 0) ? sprintf("%.6f", va / vo) : "nan";
+            printf "%.6f %s\n", d, r;
+        }')
 
-        local delta
-        delta=$(python3 -c "print(f'{float(\"$tcs_amp\") - float(\"$tcs_ori\"):.6f}')")
-        local ratio
-        ratio=$(python3 -c "
-ori = float('$tcs_ori')
-amp = float('$tcs_amp')
-print(f'{amp / ori:.6f}' if ori > 0 else 'nan')
-")
-
-        printf "%s\t%s\t%s\t%s\t%s\n" "$hog_id" "$tcs_ori" "$tcs_amp" "$delta" "$ratio" >> "$tcs_report"
-        echo " 完了 (TCS ori: $tcs_ori -> amp: $tcs_amp | ratio: $ratio)"
-        ((success_count++))
+        printf "%s\t%s\t%s\t%s\t%s\n" "$hog_id" "${tcs_ori:-0.0}" "${tcs_amp:-0.0}" "$delta" "$ratio" >> "$tcs_report"
+        echo " 完了 (TCS ori: ${tcs_ori:-0.0} -> amp: ${tcs_amp:-0.0} | ratio: $ratio)"
+        success_count=$((success_count + 1))
     done
 
     # 7. 統計サマリーの集計と表示
