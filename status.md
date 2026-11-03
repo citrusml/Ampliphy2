@@ -1,3 +1,43 @@
+最終更新: 2026-11-03 14:38
+
+## 📈 進捗状況
+- [x] 完了: PSA/PWA（Pairwise Sequence Alignment）による配列増幅精度評価パイプラインの新規実装 (完了日: 11/03)
+- [ ] 進行中: スパコン上での最新コード取得と `run_pwa_pipeline.sh` 実行・評価 (進捗率: 0% / 課題: スパコン上でのジョブ投入)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: ペアワイズアライメント（PSA/PWA）において配列増幅（ホモログ追加）が系統樹精度に与える影響を、3種類の手法（`global`, `local`, `panjep`）× 4生物種（`eukaryota`, `amniota`, `bacteria`, `actinomycete`）で比較検証したい。
+- **[解決策]**:
+  1. **コアロジックのモジュール化** (`src/pwa_pipeline.py`):
+     - `prepare_amplified_fasta`: オリジナルFASTAとホモログFASTAをマージ（ホモログ欠損時はオリジナルを安全にフォールバック）。
+     - `compute_pwa_matrix`: グローバル（Needleman-Wunsch ＋ 補正ポアソン距離 `ver2`）およびローカル（MMseqs2 ＋ 補正ポアソン距離 `ver3`）による距離行列計算と PHYLIP（`.phy`）出力。
+     - `clean_negative_branches`: NJ系統樹で発生する負の枝長を `:0.0` に自動置換し、MADの入力エラーを防止。
+     - `generate_lineage_tsv` & `summarize_pwa_results`: TCSスコア評価用の系統情報生成と改善比率（Ratio/Delta）の統計集計。
+  2. **ユニットテストの整備** (`tests/test_pwa_pipeline.py`):
+     - ポアソン距離、配列マージ、負の枝長置換、TCS集計、行列計算の全7テストを作成し、全パスを確認（合計11テスト通過）。
+  3. **スパコン用バッチスクリプトの作成** (`scripts/run_pwa_pipeline.sh`):
+     - LSFクラスタ環境向けに `run_pwa_pipeline.sh` を整備。
+     - 4生物種 × 3手法（`global`, `local`, `panjep`）の一括実行および個別指定に対応。
+     - 出力先を `results_pwa/<taxon>/<method>/` 配下（`tree_ori/`, `tree_amp/`, `tree_amp_pruned/`, `report/`）に自動整理し、全手法比較サマリー（`overall_comparison_summary.tsv`）を自動生成。
+- **[パラメータ]**:
+  - `global`: `make_pwa (ver2)` (Needleman-Wunsch + 補正ポアソン距離) + `panjep <dist.phy>`
+  - `local`: `make_pwa (ver3)` (MMseqs2 + 補正ポアソン距離) + `panjep <dist.phy>`
+  - `panjep`: `panjep -d poisson -e 0 <fasta>` (C++ 高速NJ)
+  - 枝刈り・根付け: `mad.py -n` (MAD) + `gotree prune` + `tcs.py`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取得:
+   `git pull origin main`
+2. PWAパイプラインを実行:
+   - 全4種 × 全3手法の一括実行: `bsub < scripts/run_pwa_pipeline.sh`
+   - 特定の生物種（例: eukaryota）のみ対話型実行: `bash scripts/run_pwa_pipeline.sh eukaryota`
+   - 特定の手法（例: panjep）のみ実行: `METHODS="panjep" bash scripts/run_pwa_pipeline.sh eukaryota`
+3. リアルタイムログで進捗を確認:
+   `tail -f logs/pwa/pwa_pipeline_master.log`
+4. 比較サマリーを確認:
+   `cat results_pwa/overall_comparison_summary.tsv`
+
+---
+
 最終更新: 2026-10-29 17:31
 
 ## 📈 進捗状況

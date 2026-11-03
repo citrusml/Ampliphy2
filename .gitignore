@@ -2,9 +2,14 @@ ampliphy*
 results/
 results_max/
 results_gs/
+results_pwa/
+data/
 logs/
 mmseqs_db/
 .nextflow/
 .nextflow.log*
 work/
 tests/*
+!tests/test_*.py
+__pycache__/
+*.pyc
