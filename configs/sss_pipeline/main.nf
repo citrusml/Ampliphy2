@@ -141,38 +141,8 @@ process compute_tcs {
 }
 
 workflow {
-    take:
-        fasta_ch
-        homolog_dir
-        lineage_file
-        mad_script
-        tcs_script
-
-    main:
-        merge_sequences(fasta_ch, homolog_dir)
-        compute_matrix(merge_sequences.out.amp_fasta)
-        infer_nj_tree(compute_matrix.out.matrix_tuple)
-        root_and_prune(infer_nj_tree.out.tree_tuple, mad_script)
-
-        if( lineage_file && lineage_file.name != 'NO_LINEAGE' ) {
-            compute_tcs(root_and_prune.out.pruned_trees, lineage_file, tcs_script)
-
-            compute_tcs.out.tcs_row
-                .map { f -> f.text.trim() }
-                .collectFile(
-                    name: 'tcs_report.tsv',
-                    seed: "family_id\ttcs_amp\ttcs_enr",
-                    newLine: true,
-                    sort: true,
-                    storeDir: "${params.output_dir}/report"
-                )
-        }
-}
-
-workflow {
     def input_dir = params.input_dir
     def homolog_dir = file(params.homolog_dir)
-    def lineage_file = params.lineage_file ? file(params.lineage_file) : file('NO_LINEAGE')
     def mad_script = file(params.mad_script)
     def tcs_script = file(params.tcs_script)
 

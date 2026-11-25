@@ -1,3 +1,26 @@
+最終更新: 2026-11-25 12:20
+
+## 📈 進捗状況
+- [x] 完了: Nextflow の entry workflow 定義エラー（`Entry workflow cannot have a take section`）の修正 (完了日: 11/25)
+- [ ] 進行中: NIGSC スパコン上での `git pull` と `run_sss_pipeline.sh` 再実行 (進捗率: 0% / 課題: スパコン上でのジョブ再開)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: Nextflow 実行時に `Error: Entry workflow cannot have a take section` が発生。
+  - Nextflow DSL2 において、名前なしのメインワークフロー（エントリポイントとなる `workflow { ... }`）に `take:` 宣言が含まれていた（サブワークフロー用の雛形が残っていた）ためコンパイルエラーとなった。
+- **[解決策]**:
+  - `configs/sss_pipeline/main.nf` 内の余分な `workflow { take: ... }` ブロックを削除し、引数を `params` から直接読み込む正規のエントリポイント `workflow { ... }` のみに一本化。
+- **[パラメータ]**: Nextflow DSL2 準拠
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新修正を取得:
+   `git pull origin main`
+2. SSS パイプラインを再投入:
+   `bsub < scripts/run_sss_pipeline.sh`
+3. リアルタイムログで進捗を確認:
+   `tail -f logs/sss/sss_pipeline_master.log`
+
+---
+
 最終更新: 2026-11-25 11:35
 
 ## 📈 進捗状況
