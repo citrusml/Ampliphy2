@@ -1,3 +1,38 @@
+最終更新: 2026-11-25 11:35
+
+## 📈 進捗状況
+- [x] 完了: `sss_linear` および `sss_log` の増幅系統樹（amp）・枝刈り系統樹（enr）推定 Nextflow パイプライン（`configs/sss_pipeline/main.nf`, `configs/cluster_dynamic_sss.config`, `scripts/run_sss_pipeline.sh`, `src/sss_distance.py`）の実装と単体テスト（19件全通過） (完了日: 11/25)
+- [ ] 進行中: NIGSC スパコン上でのジョブ投入と実行 (進捗率: 0% / 課題: スパコン上での実行)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: SSS（Symmetrical Sequence Similarity score: $w_{ij}$）に基づく PSA+NJ 系統樹において、ホモログ追加後の系統樹（`amp`）およびそこからホモログのみを枝刈りした系統樹（`enr` / `amp.pruned`）を LSF スパコン上で Nextflow を用いてクラスタ全体分散で高速に作成したい。
+- **[解決策]**:
+  1. **SSS コア計算モジュール (`src/sss_distance.py`)**:
+     - 松井＆岩崎 (2020) / Dufour et al. (2010) 準拠の $w_{ij}$（MMseqs2 全対全検索の bit スコア）を計算。
+     - `linear` ($d_{ij} = 1.0 - w_{ij}$) および `log` ($d_{ij} = -\ln(\max(w_{ij}, 10^{-4}))$) の両方の距離変換に対応し、PHYLIP 距離行列を出力。
+     - NJ 系統樹で稀に生じる負の枝長を `:0.0` に置換するクリーン処理。
+  2. **Nextflow ワークフロー (`configs/sss_pipeline/main.nf`)**:
+     - `merge_sequences` $\to$ `compute_matrix` $\to$ `infer_nj_tree` (RapidNJ または panjep) $\to$ `root_and_prune` (MAD根付け + GoTree枝刈り) $\to$ `compute_tcs` をパイプライン化。
+     - 各プロセスが LSF クラスター（`mafft` キュー）へ動的ジョブ投入され、全サーバー（mafftsrv0〜5, mafftweb）に分散実行。
+  3. **LSF バッチスクリプト (`scripts/run_sss_pipeline.sh`)**:
+     - 4生物種（`eukaryota`, `amniota`, `bacteria`, `actinomycete`）× 2手法（`linear`, `log`）の一括および個別実行に対応。
+     - 出力先を `results_sss/<taxon>/<model>/` 配下（`matrix/`, `tree_amp/`, `tree_rooted/`, `tree_enr/`, `report/`）に自動整理。
+- **[パラメータ]**: MMseqs2 `-s 7.5 -e 10.0`, `rapidnj -i pd -x` / `panjep -t 4`, `mad.py -n`, `gotree prune`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取得:
+   `git pull origin main`
+2. SSS パイプラインを実行:
+   - 全4生物種 × 全2手法を一括実行: `bsub < scripts/run_sss_pipeline.sh`
+   - 特定の生物種のみ実行: `bash scripts/run_sss_pipeline.sh eukaryota`
+   - 特定の手法のみ実行: `MODELS="linear" bash scripts/run_sss_pipeline.sh eukaryota`
+3. リアルタイムログで進捗を確認:
+   `tail -f logs/sss/sss_pipeline_master.log`
+4. 完了後、出力された樹と TCS レポートを確認:
+   `head results_sss/eukaryota/linear/report/tcs_report.tsv`
+
+---
+
 最終更新: 2026-11-04 05:40
 
 ## 📈 進捗状況

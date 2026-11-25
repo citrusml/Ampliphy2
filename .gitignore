@@ -5,6 +5,7 @@ results_max/
 results_denovo/
 results_gs/
 results_pwa/
+results_sss/
 data/
 logs/
 mmseqs_db/
