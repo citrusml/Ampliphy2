@@ -1,3 +1,28 @@
+最終更新: 2026-11-25 13:12
+
+## 📈 進捗状況
+- [x] 完了: `configs/sss_pipeline/main.nf` の `publishDir` パターン変数エラー (`No such variable: id`) および作業ディレクトリからのモジュール呼び出し (`python3 -m src.sss_distance`) の修正 (完了日: 11/25)
+- [ ] 進行中: NIGSC スパコン上での `git pull` と `run_sss_pipeline.sh` 再実行 (進捗率: 0% / 課題: スパコン上でのジョブ再開)
+
+## 🛠 技術的決定・メモ
+- **[課題]**:
+  1. `root_and_prune` プロセスの `publishDir` で `pattern: "${id}.amp.rooted.nwk"` としていたため、Nextflow のパース時に `No such variable: id` エラーが発生。
+  2. Nextflow の各プロセスは `work/` サブディレクトリ上で実行されるため、`python3 src/sss_distance.py` 相対パス指定だとスクリプトが見つからず失敗する恐れがあった。
+- **[解決策]**:
+  1. `publishDir` の `pattern` を静的グロブ（`'*.amp.rooted.nwk'`, `'*.enr.nwk'`）に変更。
+  2. `beforeScript` で `PYTHONPATH="$HOME/Ampliphy2"` が設定されているため、全プロセス内の呼び出しを `python3 -m src.sss_distance` に統一。
+- **[パラメータ]**: Nextflow DSL2 準拠
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新修正を取得:
+   `git pull origin main`
+2. SSS パイプラインを再投入:
+   `bsub < scripts/run_sss_pipeline.sh`
+3. リアルタイムログで進捗を確認:
+   `tail -f logs/sss/sss_pipeline_master.log`
+
+---
+
 最終更新: 2026-11-25 12:20
 
 ## 📈 進捗状況

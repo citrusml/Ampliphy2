@@ -52,7 +52,7 @@ process compute_matrix {
         def model = params.model ?: 'linear'
         def threads = task.cpus ?: 4
         """
-        python3 src/sss_distance.py matrix "${amp_fa}" "${id}.amp.phy" \
+        python3 -m src.sss_distance matrix "${amp_fa}" "${id}.amp.phy" \
             --model "${model}" \
             --threads ${threads} \
             --sensitivity 7.5 \
@@ -82,14 +82,14 @@ process infer_nj_tree {
         fi
 
         # Clean negative branches
-        python3 src/sss_distance.py clean-tree "${id}.amp.nwk"
+        python3 -m src.sss_distance clean-tree "${id}.amp.nwk"
         """
 }
 
 process root_and_prune {
     label 'short'
-    publishDir path: "${params.output_dir}/tree_rooted", mode: 'copy', pattern: "${id}.amp.rooted.nwk"
-    publishDir path: "${params.output_dir}/tree_enr", mode: 'copy', pattern: "${id}.enr.nwk"
+    publishDir path: "${params.output_dir}/tree_rooted", mode: 'copy', pattern: '*.amp.rooted.nwk'
+    publishDir path: "${params.output_dir}/tree_enr", mode: 'copy', pattern: '*.enr.nwk'
 
     input:
         tuple val(id), path(ori_fa), path(amp_fa), path(hom_fa), path(amp_nwk)
@@ -117,7 +117,7 @@ process root_and_prune {
             cp "${id}.amp.rooted.nwk" "${id}.enr.nwk"
         fi
 
-        python3 src/sss_distance.py clean-tree "${id}.enr.nwk"
+        python3 -m src.sss_distance clean-tree "${id}.enr.nwk"
         """
 }
 
