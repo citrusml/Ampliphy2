@@ -110,7 +110,7 @@ echo "DB_DIR:           $DB_DIR"
 echo "Target Taxa:      ${TARGET_TAXA[*]}"
 echo "E-values:         $EVALUES (Random Seed: $RANDOM_SEED)"
 echo "Variants:         $VARIANTS"
-echo "Methods:          msa_ml, fastme_poisson (-n -s), msa_nj (RapidNJ), gs_poisson (gs2 -d), psa_nj_nw (NW+Poisson RapidNJ), psa_fastme_nw (NW+Poisson FastME)"
+echo "Methods:          msa_ml, fastme_poisson (-n -s), msa_nj (RapidNJ), gs_poisson (gs2 -d), psa_nj_nw, psa_fastme_nw, psa_nj_sss_linear, psa_fastme_sss_linear"
 echo "Output Base Dir:  $RESULTS_BASE_DIR"
 echo "=============================================================================="
 

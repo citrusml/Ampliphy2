@@ -1,3 +1,24 @@
+最終更新: 2026-11-26 21:23
+
+## 📈 進捗状況
+- [x] 完了: `run_evalue_benchmark.sh`（`configs/evalue_benchmark/main.nf`）への PSA+NJ（SSS linear: `psa_nj_sss_linear` および `psa_fastme_sss_linear`）の追加・テスト通過 (完了日: 11/26)
+- [ ] 進行中: NIGSC スパコン上での `git pull` と `-resume` 再開・完了待ち (進捗率: 0% / 課題: スパコン上でのジョブ再開)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: E-value 5水準ベンチマークにおいて、`NW + Poisson` に加えて **SSS linear**（MMseqs2 ベースの $w_{ij}$ による $d_{ij} = 1 - w_{ij}$）も同時に比較したい。
+- **[解決策]**:
+  - `configs/evalue_benchmark/main.nf` に `compute_sss_linear_matrix`（`src.sss_distance matrix --model linear`）、`infer_psa_nj_sss_linear`（RapidNJ）、`infer_psa_fastme_sss_linear`（FastME `-m N -n -s`）を追加。
+  - `variant = 'psa_sss_linear'` として `e_<eval>/psa_sss_linear/` 配下に保存し、`report/tcs_summary.tsv` へ統合出力。
+- **[パラメータ]**: `src.sss_distance --model linear -s 7.5 -e 10.0`, `RapidNJ -i pd`, `FastME -m N -n -s`
+
+## 🚀 次に行うこと (Next Actions)
+1. 現在のジョブ完了後（または再投入時）、スパコン上で最新修正を取得:
+   `git pull origin main`
+2. `-resume` 付きで再投入:
+   `bsub < scripts/run_evalue_benchmark.sh`
+
+---
+
 最終更新: 2026-11-26 21:21
 
 ## 📈 進捗状況

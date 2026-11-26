@@ -396,6 +396,110 @@ process infer_psa_fastme_nw {
         """
 }
 
+process compute_sss_linear_matrix {
+    label 'short'
+    publishDir { "${params.output_dir}/e_${eval_val}/psa_sss_linear/matrix" }, mode: 'copy',
+        pattern: '*.sss_linear.phy'
+
+    input:
+        tuple val(id), val(eval_val), path(ori_fa), path(hom_fa)
+
+    output:
+        tuple val(id), val(eval_val), val('psa_sss_linear'), path("${id}.sss_linear.phy"), path(hom_fa), emit: sss_matrix_tuple
+
+    script:
+        def threads = task.cpus ?: 4
+        """
+        set -euo pipefail
+        if [[ -s "${hom_fa}" ]]; then
+            python3 -m src.pwa_pipeline merge "${ori_fa}" "${hom_fa}" _amp.fa
+        else
+            cp "${ori_fa}" _amp.fa
+        fi
+        python3 -m src.sss_distance matrix _amp.fa "${id}.sss_linear.phy" \
+            --model linear \
+            --threads ${threads} \
+            --sensitivity 7.5 \
+            --evalue 10.0
+        """
+}
+
+process infer_psa_nj_sss_linear {
+    label 'short'
+    publishDir { "${params.output_dir}/e_${eval_val}/psa_sss_linear/psa_nj_sss_linear/tree_amp" }, mode: 'copy',
+        pattern: '*.amp.rooted.nwk', saveAs: { _fn -> "${id}.amp.nwk" }
+    publishDir { "${params.output_dir}/e_${eval_val}/psa_sss_linear/psa_nj_sss_linear/tree_enr" }, mode: 'copy',
+        pattern: '*.enr.nwk'
+
+    input:
+        tuple val(id), val(eval_val), val(variant), path(phy_file), path(hom_fa)
+        path mad_script
+
+    output:
+        tuple val(id), val(eval_val), val(variant), val('psa_nj_sss_linear'), path("${id}.amp.rooted.nwk"), path("${id}.enr.nwk"), emit: trees
+
+    script:
+        """
+        set -euo pipefail
+        rapidnj "${phy_file}" -i pd -x "${id}.amp.nwk"
+        python3 -m src.msa_distance clean-tree "${id}.amp.nwk"
+
+        python3 "${mad_script}" "${id}.amp.nwk" -n
+        head -n 1 "${id}.amp.nwk.rooted" > "${id}.amp.rooted.nwk"
+
+        if [[ -s "${hom_fa}" ]]; then
+            awk '/^>/{print substr(\$1,2)}' "${hom_fa}" > tips.txt
+            if command -v gotree &>/dev/null; then
+                gotree prune -i "${id}.amp.rooted.nwk" -f tips.txt -o "${id}.enr.nwk"
+            else
+                cp "${id}.amp.rooted.nwk" "${id}.enr.nwk"
+            fi
+            rm -f tips.txt
+        else
+            cp "${id}.amp.rooted.nwk" "${id}.enr.nwk"
+        fi
+        python3 -m src.msa_distance clean-tree "${id}.enr.nwk"
+        """
+}
+
+process infer_psa_fastme_sss_linear {
+    label 'short'
+    publishDir { "${params.output_dir}/e_${eval_val}/psa_sss_linear/psa_fastme_sss_linear/tree_amp" }, mode: 'copy',
+        pattern: '*.amp.rooted.nwk', saveAs: { _fn -> "${id}.amp.nwk" }
+    publishDir { "${params.output_dir}/e_${eval_val}/psa_sss_linear/psa_fastme_sss_linear/tree_enr" }, mode: 'copy',
+        pattern: '*.enr.nwk'
+
+    input:
+        tuple val(id), val(eval_val), val(variant), path(phy_file), path(hom_fa)
+        path mad_script
+
+    output:
+        tuple val(id), val(eval_val), val(variant), val('psa_fastme_sss_linear'), path("${id}.amp.rooted.nwk"), path("${id}.enr.nwk"), emit: trees
+
+    script:
+        """
+        set -euo pipefail
+        fastme -m N -n -s -i "${phy_file}" -o "${id}.amp.nwk"
+        python3 -m src.msa_distance clean-tree "${id}.amp.nwk"
+
+        python3 "${mad_script}" "${id}.amp.nwk" -n
+        head -n 1 "${id}.amp.nwk.rooted" > "${id}.amp.rooted.nwk"
+
+        if [[ -s "${hom_fa}" ]]; then
+            awk '/^>/{print substr(\$1,2)}' "${hom_fa}" > tips.txt
+            if command -v gotree &>/dev/null; then
+                gotree prune -i "${id}.amp.rooted.nwk" -f tips.txt -o "${id}.enr.nwk"
+            else
+                cp "${id}.amp.rooted.nwk" "${id}.enr.nwk"
+            fi
+            rm -f tips.txt
+        else
+            cp "${id}.amp.rooted.nwk" "${id}.enr.nwk"
+        fi
+        python3 -m src.msa_distance clean-tree "${id}.enr.nwk"
+        """
+}
+
 process compute_tcs {
     label 'minimal'
 
@@ -476,6 +580,11 @@ workflow {
     infer_psa_nj_nw(compute_nw_poisson_matrix.out.nw_matrix_tuple, mad_script)
     infer_psa_fastme_nw(compute_nw_poisson_matrix.out.nw_matrix_tuple, mad_script)
 
+    // 5c. PSA (SSS linear) -> RapidNJ & FastME (-n -s)
+    compute_sss_linear_matrix(psa_inputs)
+    infer_psa_nj_sss_linear(compute_sss_linear_matrix.out.sss_matrix_tuple, mad_script)
+    infer_psa_fastme_sss_linear(compute_sss_linear_matrix.out.sss_matrix_tuple, mad_script)
+
     // 6. Compute TCS summary
     if (params.lineage_file && file(params.lineage_file).exists()) {
         infer_msa_ml.out.trees
@@ -484,7 +593,9 @@ workflow {
                 infer_msa_nj.out.trees,
                 infer_gs_poisson.out.trees,
                 infer_psa_nj_nw.out.trees,
-                infer_psa_fastme_nw.out.trees
+                infer_psa_fastme_nw.out.trees,
+                infer_psa_nj_sss_linear.out.trees,
+                infer_psa_fastme_sss_linear.out.trees
             )
             .set { all_trees }
 
