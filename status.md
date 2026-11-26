@@ -1,3 +1,33 @@
+最終更新: 2026-11-26 20:58
+
+## 📈 進捗状況
+- [x] 完了: E-value 5水準 × addfragments (`keeplength` 有無) × MaxAlign (有無) × 4系統樹推定手法 × 2生物種 (`eukaryota`, `bacteria`) の比較ベンチマークパイプラインと TCS/TCSr2 評価の実装・テスト通過 (完了日: 11/26)
+- [ ] 進行中: NIGSC スパコン上での小規模確認・ジョブ投入 (進捗率: 0% / 課題: スパコン上での実行)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: `eukaryota` と `bacteria` に対して E-value（`1e-100, 1e-10, 1e-3, 1e-1, 1e-0`）、`--keeplength` 有無、MaxAlign 有無の組み合わせごとに4種類の系統樹推定（`msa_ml`, `fastme_poisson`, `msa_nj`, `gs_poisson`）を行い、TCS および TCSr2 を一括評価したい。
+- **[解決策]**:
+  1. **MSA Poisson 距離行列モジュール (`src/msa_distance.py`)**: ペアごとの非ギャップサイト（Pairwise deletion）から一致率を計算し、Poisson 距離 $d = -\ln(\max(\text{identity}, 10^{-4}))$ を算出して PHYLIP 形式で出力。
+  2. **TCSr2 評価モジュール (`src/tcsr2.py`)**: `ampliphy_tcsr` 準拠の無根木トポロジー一致度 `TCSr2 = 1.0 - (TCSr_raw / max_penalty)` を算出。
+  3. **Nextflow パイプライン (`configs/evalue_benchmark/main.nf`, `configs/cluster_dynamic_evalue.config`)**:
+     - MMseqs2 検索は固定シード `42` のランダムサンプリング（`ampliphy_mmseqs_search.sh`）を使用。
+     - `fastme -m N -n -s`（NNI + SPR あり）、`rapidnj -i pd`、`gs2 -d -s -l`、`iqtree -m JTT+I+G4 -B 1000 -keep-ident` を LSF クラスタ上に並列投入。
+     - `report/tcs_summary.tsv` に `family_id, evalue, variant, method, tcs_amp, tcs_enr, tcsr2_amp, tcsr2_enr` を出力。
+  4. **LSF 実行スクリプト (`scripts/run_evalue_benchmark.sh`)**: `biotools` 環境で不足ツール（`fastme`, `rapidnj`, `toytree`）があれば自動補完し、`eukaryota` と `bacteria` を並列起動。
+- **[パラメータ]**: `EVALUES=1e-100,1e-10,1e-3,1e-1,1e-0`, `RANDOM_SEED=42`, `max_depth=5`, `fastme -m N -n -s`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取得:
+   `git pull origin main`
+2. 小規模動作確認（1条件のみ）:
+   `EVALUES="1e-3" VARIANTS="maxa_on_keep_on" bash scripts/run_evalue_benchmark.sh eukaryota`
+3. 問題なければ全条件一括投入:
+   `bsub < scripts/run_evalue_benchmark.sh`
+4. 完了後、サマリーを確認:
+   `head results_evalue_bench/eukaryota/report/tcs_summary.tsv`
+
+---
+
 最終更新: 2026-11-26 20:38
 
 ## 📈 進捗状況

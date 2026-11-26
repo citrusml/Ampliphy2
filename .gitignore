@@ -6,6 +6,7 @@ results_denovo/
 results_gs/
 results_pwa/
 results_sss/
+results_evalue_bench/
 data/
 logs/
 mmseqs_db/
