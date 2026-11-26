@@ -34,7 +34,7 @@ process mafft_align_ori {
 
 process mmseqs_search_eval {
     label 'mmseqs'
-    publishDir "${params.output_dir}/homologs/e_${eval_val}", mode: 'copy',
+    publishDir { "${params.output_dir}/homologs/e_${eval_val}" }, mode: 'copy',
         saveAs: { filename -> filename.endsWith('.homologs.fa') ? filename : null }
 
     input:
@@ -73,9 +73,9 @@ process mmseqs_search_eval {
 
 process build_variant_msa {
     label 'short'
-    publishDir "${params.output_dir}/e_${eval_val}/${variant}/msa", mode: 'copy',
-        pattern: "${id}.msa_final.fa",
-        saveAs: { "${id}.fa" }
+    publishDir { "${params.output_dir}/e_${eval_val}/${variant}/msa" }, mode: 'copy',
+        pattern: '*.msa_final.fa',
+        saveAs: { _fn -> "${id}.fa" }
 
     input:
         tuple val(id), val(eval_val), val(variant), path(ori_msa), path(hom_fa)
@@ -125,8 +125,8 @@ process build_variant_msa {
 
 process compute_poisson_matrix {
     label 'minimal'
-    publishDir "${params.output_dir}/e_${eval_val}/${variant}/matrix", mode: 'copy',
-        pattern: "${id}.poisson.phy"
+    publishDir { "${params.output_dir}/e_${eval_val}/${variant}/matrix" }, mode: 'copy',
+        pattern: '*.poisson.phy'
 
     input:
         tuple val(id), val(eval_val), val(variant), path(msa_fa), path(hom_fa)
@@ -142,10 +142,10 @@ process compute_poisson_matrix {
 
 process infer_msa_ml {
     label 'tree'
-    publishDir "${params.output_dir}/e_${eval_val}/${variant}/msa_ml/tree_amp", mode: 'copy',
-        pattern: "${id}.amp.rooted.nwk", saveAs: { "${id}.amp.nwk" }
-    publishDir "${params.output_dir}/e_${eval_val}/${variant}/msa_ml/tree_enr", mode: 'copy',
-        pattern: "${id}.enr.nwk"
+    publishDir { "${params.output_dir}/e_${eval_val}/${variant}/msa_ml/tree_amp" }, mode: 'copy',
+        pattern: '*.amp.rooted.nwk', saveAs: { _fn -> "${id}.amp.nwk" }
+    publishDir { "${params.output_dir}/e_${eval_val}/${variant}/msa_ml/tree_enr" }, mode: 'copy',
+        pattern: '*.enr.nwk'
 
     input:
         tuple val(id), val(eval_val), val(variant), path(msa_fa), path(hom_fa)
@@ -186,10 +186,10 @@ process infer_msa_ml {
 
 process infer_fastme_poisson {
     label 'short'
-    publishDir "${params.output_dir}/e_${eval_val}/${variant}/fastme_poisson/tree_amp", mode: 'copy',
-        pattern: "${id}.amp.rooted.nwk", saveAs: { "${id}.amp.nwk" }
-    publishDir "${params.output_dir}/e_${eval_val}/${variant}/fastme_poisson/tree_enr", mode: 'copy',
-        pattern: "${id}.enr.nwk"
+    publishDir { "${params.output_dir}/e_${eval_val}/${variant}/fastme_poisson/tree_amp" }, mode: 'copy',
+        pattern: '*.amp.rooted.nwk', saveAs: { _fn -> "${id}.amp.nwk" }
+    publishDir { "${params.output_dir}/e_${eval_val}/${variant}/fastme_poisson/tree_enr" }, mode: 'copy',
+        pattern: '*.enr.nwk'
 
     input:
         tuple val(id), val(eval_val), val(variant), path(phy_file), path(hom_fa)
@@ -224,10 +224,10 @@ process infer_fastme_poisson {
 
 process infer_msa_nj {
     label 'short'
-    publishDir "${params.output_dir}/e_${eval_val}/${variant}/msa_nj/tree_amp", mode: 'copy',
-        pattern: "${id}.amp.rooted.nwk", saveAs: { "${id}.amp.nwk" }
-    publishDir "${params.output_dir}/e_${eval_val}/${variant}/msa_nj/tree_enr", mode: 'copy',
-        pattern: "${id}.enr.nwk"
+    publishDir { "${params.output_dir}/e_${eval_val}/${variant}/msa_nj/tree_amp" }, mode: 'copy',
+        pattern: '*.amp.rooted.nwk', saveAs: { _fn -> "${id}.amp.nwk" }
+    publishDir { "${params.output_dir}/e_${eval_val}/${variant}/msa_nj/tree_enr" }, mode: 'copy',
+        pattern: '*.enr.nwk'
 
     input:
         tuple val(id), val(eval_val), val(variant), path(phy_file), path(hom_fa)
@@ -262,10 +262,10 @@ process infer_msa_nj {
 
 process infer_gs_poisson {
     label 'short'
-    publishDir "${params.output_dir}/e_${eval_val}/${variant}/gs_poisson/tree_amp", mode: 'copy',
-        pattern: "${id}.amp.nwk"
-    publishDir "${params.output_dir}/e_${eval_val}/${variant}/gs_poisson/tree_enr", mode: 'copy',
-        pattern: "${id}.enr.nwk"
+    publishDir { "${params.output_dir}/e_${eval_val}/${variant}/gs_poisson/tree_amp" }, mode: 'copy',
+        pattern: '*.amp.nwk'
+    publishDir { "${params.output_dir}/e_${eval_val}/${variant}/gs_poisson/tree_enr" }, mode: 'copy',
+        pattern: '*.enr.nwk'
 
     input:
         tuple val(id), val(eval_val), val(variant), path(phy_file), path(hom_fa)

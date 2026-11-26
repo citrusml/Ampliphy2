@@ -1,3 +1,24 @@
+最終更新: 2026-11-26 21:14
+
+## 📈 進捗状況
+- [x] 完了: `configs/evalue_benchmark/main.nf` の `publishDir` クロージャ化（`No such variable: eval_val` エラー解消） (完了日: 11/26)
+- [ ] 進行中: NIGSC スパコン上での `git pull` と `run_evalue_benchmark.sh` 再実行 (進捗率: 0% / 課題: スパコン上でのジョブ再開)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: Nextflow 実行時に `ERROR ~ No such variable: eval_val` が発生。
+  - `publishDir` の `path` および `pattern` にプロセス入力変数（`eval_val`, `variant`, `id`）を直接 GString 展開していたため、プロセス定義パース時に未定義変数エラーとなっていた。
+- **[解決策]**:
+  - すべての `publishDir` について、`path` をクロージャ `{ "${params.output_dir}/..." }` に変更し、`pattern` を静的グロブ（`*.msa_final.fa`, `*.poisson.phy`, `*.amp.rooted.nwk`, `*.enr.nwk`, `*.amp.nwk`）に変更。
+- **[パラメータ]**: Nextflow DSL2 (`26.10.x`) 準拠
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新修正を取得:
+   `git pull origin main`
+2. 再実行:
+   `bsub < scripts/run_evalue_benchmark.sh`
+
+---
+
 最終更新: 2026-11-26 20:58
 
 ## 📈 進捗状況
