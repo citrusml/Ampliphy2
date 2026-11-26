@@ -1,3 +1,24 @@
+最終更新: 2026-11-26 20:38
+
+## 📈 進捗状況
+- [x] 完了: `ampliphy_mmseqs_search.sh` のホモログ選択を `head -n` から固定シード（`42`）によるランダムサンプリングへ修正 (完了日: 11/26)
+- [ ] 進行中: NIGSC スパコン上での `git pull` と必要に応じた再実行 (進捗率: 0% / 課題: スパコン上での反映)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: `ampliphy-analysis/scripts/run_mmseqs` では `shuf -n` によるランダムサンプリングが行われていたのに対し、Nextflow 版 `ampliphy/bin/ampliphy_mmseqs_search.sh` では `head -n` により先頭から順（クエリ順・スコア上位順）にホモログを取得していた。
+- **[解決策]**:
+  - `ampliphy/bin/ampliphy_mmseqs_search.sh`（および同期元の `configs/ampliphy_nf/bin/ampliphy_mmseqs_search.sh`）の選択処理を Python の `random.Random(seed).sample(lines, k)` に変更。
+  - デフォルトの固定シードを `42`（環境変数 `AMPLIPHY_RANDOM_SEED` で変更可能）に設定し、Linux (NIGSC) と macOS の両方で完全な再現性（決定論的ランダム抽出）を担保。
+- **[パラメータ]**: `AMPLIPHY_RANDOM_SEED = 42`（デフォルト）、MMseqs2 `-e 1e-3`（既存通り）
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新コードを取得:
+   `git pull origin main`
+2. ランダムサンプリング版で再実行する場合（既存キャッシュをやり直す場合は `-resume` なしで実行するか、`work/`・対象出力をクリアして投入）:
+   `bsub < scripts/run_ampliphy_denovo.sh`
+
+---
+
 最終更新: 2026-11-25 13:12
 
 ## 📈 進捗状況
