@@ -110,7 +110,7 @@ echo "DB_DIR:           $DB_DIR"
 echo "Target Taxa:      ${TARGET_TAXA[*]}"
 echo "E-values:         $EVALUES (Random Seed: $RANDOM_SEED)"
 echo "Variants:         $VARIANTS"
-echo "Methods:          msa_ml, fastme_poisson (-n -s), msa_nj (RapidNJ), gs_poisson (gs2 -d)"
+echo "Methods:          msa_ml, fastme_poisson (-n -s), msa_nj (RapidNJ), gs_poisson (gs2 -d), psa_nj_nw (NW+Poisson RapidNJ), psa_fastme_nw (NW+Poisson FastME)"
 echo "Output Base Dir:  $RESULTS_BASE_DIR"
 echo "=============================================================================="
 
@@ -138,11 +138,12 @@ export PYTHONUNBUFFERED=1
 export PYTHONPATH="$AMPLIPHY_ROOT:${PYTHONPATH:-}"
 export PATH="$AMPLIPHY_DIR/bin:$HOME/gs:$HOME/.local/bin:$PATH"
 
-# fastme / rapidnj / toytree が未導入の場合は自動インストール
+# fastme / rapidnj / toytree / biopython が未導入の場合は自動インストール
 MISSING_TOOLS=()
 command -v fastme &>/dev/null || MISSING_TOOLS+=("fastme")
 command -v rapidnj &>/dev/null || MISSING_TOOLS+=("rapidnj")
 python3 -c "import toytree" &>/dev/null || MISSING_TOOLS+=("toytree")
+python3 -c "import Bio" &>/dev/null || MISSING_TOOLS+=("biopython")
 if [ "${#MISSING_TOOLS[@]}" -gt 0 ]; then
     echo "[INFO] biotools 環境に不足ツール/パッケージ (${MISSING_TOOLS[*]}) をインストールします..."
     if command -v micromamba &>/dev/null; then

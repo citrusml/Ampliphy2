@@ -1,3 +1,25 @@
+最終更新: 2026-11-26 21:21
+
+## 📈 進捗状況
+- [x] 完了: `run_evalue_benchmark.sh`（`configs/evalue_benchmark/main.nf`）への PSA+NJ（NW + Poisson: `psa_nj_nw` および `psa_fastme_nw`）の追加・テスト通過 (完了日: 11/26)
+- [ ] 進行中: NIGSC スパコン上での `git pull` と `-resume` 再開・完了待ち (進捗率: 0% / 課題: スパコン上でのジョブ再開)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: E-value 5水準（`1e-100, 1e-10, 1e-3, 1e-1, 1e-0`）のベンチマークにおいて、MSA ベース 4 手法に加えて **PSA+NJ（NW + Poisson）** も同時に計算・比較したい。
+- **[解決策]**:
+  - `configs/evalue_benchmark/main.nf` に `compute_nw_poisson_matrix`（`src.pwa_pipeline merge` + `matrix --method ver2`: Needleman-Wunsch BLOSUM62 + 補正 Poisson 距離）、`infer_psa_nj_nw`（RapidNJ）、`infer_psa_fastme_nw`（FastME `-m N -n -s`）を追加。
+  - `variant = 'psa_nw'` として `e_<eval>/psa_nw/` 配下に保存し、`report/tcs_summary.tsv` へ TCS・TCSr2 を統合出力。
+  - `-resume` により既存の完了済み MMseqs2 検索・MSA 推定キャッシュはそのまま再利用される。
+- **[パラメータ]**: `NW+Poisson` (`ver2`), `RapidNJ -i pd`, `FastME -m N -n -s`
+
+## 🚀 次に行うこと (Next Actions)
+1. 現在のジョブが完了するか停止した後、スパコン上で最新修正を取得:
+   `git pull origin main`
+2. `-resume` 付きで再投入（既存キャッシュを活かして PSA+NJ のみ追加計算）:
+   `bsub < scripts/run_evalue_benchmark.sh`
+
+---
+
 最終更新: 2026-11-26 21:14
 
 ## 📈 進捗状況

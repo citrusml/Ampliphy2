@@ -296,6 +296,106 @@ process infer_gs_poisson {
         """
 }
 
+process compute_nw_poisson_matrix {
+    label 'short'
+    publishDir { "${params.output_dir}/e_${eval_val}/psa_nw/matrix" }, mode: 'copy',
+        pattern: '*.nw_poisson.phy'
+
+    input:
+        tuple val(id), val(eval_val), path(ori_fa), path(hom_fa)
+
+    output:
+        tuple val(id), val(eval_val), val('psa_nw'), path("${id}.nw_poisson.phy"), path(hom_fa), emit: nw_matrix_tuple
+
+    script:
+        def threads = task.cpus ?: 4
+        """
+        set -euo pipefail
+        if [[ -s "${hom_fa}" ]]; then
+            python3 -m src.pwa_pipeline merge "${ori_fa}" "${hom_fa}" _amp.fa
+        else
+            cp "${ori_fa}" _amp.fa
+        fi
+        python3 -m src.pwa_pipeline matrix _amp.fa "${id}.nw_poisson.phy" --method ver2 -t ${threads}
+        """
+}
+
+process infer_psa_nj_nw {
+    label 'short'
+    publishDir { "${params.output_dir}/e_${eval_val}/psa_nw/psa_nj_nw/tree_amp" }, mode: 'copy',
+        pattern: '*.amp.rooted.nwk', saveAs: { _fn -> "${id}.amp.nwk" }
+    publishDir { "${params.output_dir}/e_${eval_val}/psa_nw/psa_nj_nw/tree_enr" }, mode: 'copy',
+        pattern: '*.enr.nwk'
+
+    input:
+        tuple val(id), val(eval_val), val(variant), path(phy_file), path(hom_fa)
+        path mad_script
+
+    output:
+        tuple val(id), val(eval_val), val(variant), val('psa_nj_nw'), path("${id}.amp.rooted.nwk"), path("${id}.enr.nwk"), emit: trees
+
+    script:
+        """
+        set -euo pipefail
+        rapidnj "${phy_file}" -i pd -x "${id}.amp.nwk"
+        python3 -m src.msa_distance clean-tree "${id}.amp.nwk"
+
+        python3 "${mad_script}" "${id}.amp.nwk" -n
+        head -n 1 "${id}.amp.nwk.rooted" > "${id}.amp.rooted.nwk"
+
+        if [[ -s "${hom_fa}" ]]; then
+            awk '/^>/{print substr(\$1,2)}' "${hom_fa}" > tips.txt
+            if command -v gotree &>/dev/null; then
+                gotree prune -i "${id}.amp.rooted.nwk" -f tips.txt -o "${id}.enr.nwk"
+            else
+                cp "${id}.amp.rooted.nwk" "${id}.enr.nwk"
+            fi
+            rm -f tips.txt
+        else
+            cp "${id}.amp.rooted.nwk" "${id}.enr.nwk"
+        fi
+        python3 -m src.msa_distance clean-tree "${id}.enr.nwk"
+        """
+}
+
+process infer_psa_fastme_nw {
+    label 'short'
+    publishDir { "${params.output_dir}/e_${eval_val}/psa_nw/psa_fastme_nw/tree_amp" }, mode: 'copy',
+        pattern: '*.amp.rooted.nwk', saveAs: { _fn -> "${id}.amp.nwk" }
+    publishDir { "${params.output_dir}/e_${eval_val}/psa_nw/psa_fastme_nw/tree_enr" }, mode: 'copy',
+        pattern: '*.enr.nwk'
+
+    input:
+        tuple val(id), val(eval_val), val(variant), path(phy_file), path(hom_fa)
+        path mad_script
+
+    output:
+        tuple val(id), val(eval_val), val(variant), val('psa_fastme_nw'), path("${id}.amp.rooted.nwk"), path("${id}.enr.nwk"), emit: trees
+
+    script:
+        """
+        set -euo pipefail
+        fastme -m N -n -s -i "${phy_file}" -o "${id}.amp.nwk"
+        python3 -m src.msa_distance clean-tree "${id}.amp.nwk"
+
+        python3 "${mad_script}" "${id}.amp.nwk" -n
+        head -n 1 "${id}.amp.nwk.rooted" > "${id}.amp.rooted.nwk"
+
+        if [[ -s "${hom_fa}" ]]; then
+            awk '/^>/{print substr(\$1,2)}' "${hom_fa}" > tips.txt
+            if command -v gotree &>/dev/null; then
+                gotree prune -i "${id}.amp.rooted.nwk" -f tips.txt -o "${id}.enr.nwk"
+            else
+                cp "${id}.amp.rooted.nwk" "${id}.enr.nwk"
+            fi
+            rm -f tips.txt
+        else
+            cp "${id}.amp.rooted.nwk" "${id}.enr.nwk"
+        fi
+        python3 -m src.msa_distance clean-tree "${id}.enr.nwk"
+        """
+}
+
 process compute_tcs {
     label 'minimal'
 
@@ -358,11 +458,23 @@ workflow {
     // 4. Compute Poisson distance matrix once per (HOG, E-value, variant)
     compute_poisson_matrix(build_variant_msa.out.variant_msa)
 
-    // 5. Infer trees with all 4 methods
+    // 5. Infer trees with all 4 MSA methods
     infer_msa_ml(build_variant_msa.out.variant_msa, mad_script)
     infer_fastme_poisson(compute_poisson_matrix.out.matrix_tuple, mad_script)
     infer_msa_nj(compute_poisson_matrix.out.matrix_tuple, mad_script)
     infer_gs_poisson(compute_poisson_matrix.out.matrix_tuple)
+
+    // 5b. PSA (NW + Poisson) -> RapidNJ & FastME (-n -s)
+    fasta_ch
+        .combine(mmseqs_search_eval.out.homolog_seqs, by: 0)
+        .map { id, ori_fa, eval_val, hom_fa ->
+            tuple(id, eval_val, ori_fa, hom_fa)
+        }
+        .set { psa_inputs }
+
+    compute_nw_poisson_matrix(psa_inputs)
+    infer_psa_nj_nw(compute_nw_poisson_matrix.out.nw_matrix_tuple, mad_script)
+    infer_psa_fastme_nw(compute_nw_poisson_matrix.out.nw_matrix_tuple, mad_script)
 
     // 6. Compute TCS summary
     if (params.lineage_file && file(params.lineage_file).exists()) {
@@ -370,7 +482,9 @@ workflow {
             .mix(
                 infer_fastme_poisson.out.trees,
                 infer_msa_nj.out.trees,
-                infer_gs_poisson.out.trees
+                infer_gs_poisson.out.trees,
+                infer_psa_nj_nw.out.trees,
+                infer_psa_fastme_nw.out.trees
             )
             .set { all_trees }
 
