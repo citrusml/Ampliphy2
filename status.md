@@ -1,3 +1,25 @@
+最終更新: 2026-11-27 19:25
+
+## 📈 進捗状況
+- [x] 完了: `mmseqs_search_eval` の exit status 140 対策（`time = 24.h`, `memory = 48.GB`, `maxForks = 20`, `errorStrategy = 'retry'` 設定） (完了日: 11/27)
+- [ ] 進行中: NIGSC スパコン上での `git pull` と `-resume` 再開 (進捗率: 0% / 課題: スパコン上でのジョブ再開)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: `mmseqs_search_eval (412)` が `exit status 140`（LSF ランタイム上限 SIGUSR2 / メモリ負荷）で終了し、実行中だった 149 タスクが連動停止した。
+  - 原因: `UniRef50.idx`（約 105GB）が `--split-memory-limit 25G` より大きいためインデックスを使用しない検索にフォールバックした状態で、同時に最大 300 本の `mmseqs` ジョブが Lustre ストレージへ殺到し、I/O 競合により処理時間が `time = 6.h` を超過した可能性が高い。
+- **[解決策]**:
+  - `configs/cluster_dynamic_evalue.config` の `mmseqs` ラベルに `time = 24.h`, `memory = 48.GB`, `maxForks = 20`, `errorStrategy = 'retry'`, `maxRetries = 2` を設定し、Lustre I/O 競合の緩和と時間・メモリ余裕を確保。
+  - `tree` ラベルにも `time = 24.h`, `errorStrategy = 'retry'`, `maxRetries = 2` を設定。
+- **[パラメータ]**: `mmseqs`: `cpus = 8`, `memory = 48.GB`, `time = 24.h`, `maxForks = 20`
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新修正を取得:
+   `git pull origin main`
+2. `-resume` で再開（完了済みのタスクはキャッシュから即座に復元されます）:
+   `bsub < scripts/run_evalue_benchmark.sh`
+
+---
+
 最終更新: 2026-11-26 21:23
 
 ## 📈 進捗状況
