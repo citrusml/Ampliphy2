@@ -1,3 +1,24 @@
+最終更新: 2026-11-27 19:30
+
+## 📈 進捗状況
+- [x] 完了: `run_evalue_benchmark.sh`（`configs/evalue_benchmark/main.nf`）への PSA+NJ（NW `-20/-2` + Poisson: `psa_nj_nw20` および `psa_fastme_nw20`）の追加・テスト通過 (完了日: 11/27)
+- [ ] 進行中: NIGSC スパコン上での `git pull` と `-resume` 再開 (進捗率: 0% / 課題: スパコン上でのジョブ再開)
+
+## 🛠 技術的決定・メモ
+- **[課題]**: `src/pwa_pipeline.py` の NW デフォルトが `-11/-1` だったため、PhyPA 準拠の `-20/-2`（`open_gap_score = -20.0`, `extend_gap_score = -2.0`）も比較対象として追加実行したい。
+- **[解決策]**:
+  - `src/pwa_pipeline.py` の `compute_pwa_matrix` および CLI `matrix` サブコマンドに `--gap-open` / `--gap-extend` 引数を追加（デフォルトは従来通り `-11/-1`）。
+  - `configs/evalue_benchmark/main.nf` に `compute_nw20_poisson_matrix`、`infer_psa_nj_nw20`（RapidNJ）、`infer_psa_fastme_nw20`（FastME `-m N -n -s`）を追加し、`variant = 'psa_nw20'` として TCS/TCSr2 レポートへ合流。
+- **[パラメータ]**: `gap_open = -20.0`, `gap_extend = -2.0`, `BLOSUM62`, `ver2` Poisson 距離
+
+## 🚀 次に行うこと (Next Actions)
+1. スパコン上で最新修正を取得:
+   `git pull origin main`
+2. `-resume` で再開:
+   `bsub < scripts/run_evalue_benchmark.sh`
+
+---
+
 最終更新: 2026-11-27 19:25
 
 ## 📈 進捗状況

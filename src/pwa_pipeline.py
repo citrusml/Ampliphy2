@@ -309,6 +309,8 @@ def compute_pwa_matrix(
     method: str = "ver2",
     threads: int = 4,
     sensitivity: float = 7.5,
+    gap_open: Optional[float] = None,
+    gap_extend: Optional[float] = None,
 ) -> Tuple[List[str], List[List[float]]]:
     """
     Compute pairwise evolutionary distance matrix from FASTA.
@@ -354,12 +356,12 @@ def compute_pwa_matrix(
         if is_nucl:
             aligner.match_score = 1.0
             aligner.mismatch_score = -3.0
-            aligner.open_gap_score = -5.0
-            aligner.extend_gap_score = -2.0
+            aligner.open_gap_score = gap_open if gap_open is not None else -5.0
+            aligner.extend_gap_score = gap_extend if gap_extend is not None else -2.0
         else:
             aligner.substitution_matrix = substitution_matrices.load("BLOSUM62")
-            aligner.open_gap_score = -11.0
-            aligner.extend_gap_score = -1.0
+            aligner.open_gap_score = gap_open if gap_open is not None else -11.0
+            aligner.extend_gap_score = gap_extend if gap_extend is not None else -1.0
 
         for i in range(n):
             for j in range(i + 1, n):
@@ -674,6 +676,8 @@ def main() -> None:
     p_mat.add_argument("--method", choices=["ver2", "ver3", "local", "global"], default="ver2")
     p_mat.add_argument("-t", "--threads", type=int, default=4)
     p_mat.add_argument("-s", "--sensitivity", type=float, default=7.5)
+    p_mat.add_argument("--gap-open", type=float, default=None, help="Global alignment gap open score (e.g., -20.0)")
+    p_mat.add_argument("--gap-extend", type=float, default=None, help="Global alignment gap extend score (e.g., -2.0)")
 
     # Subcommand: merge
     p_merge = subparsers.add_parser("merge", help="Merge original and homolog FASTA")
@@ -690,7 +694,12 @@ def main() -> None:
 
     if args.command == "matrix":
         seq_ids, matrix = compute_pwa_matrix(
-            args.input_fasta, method=args.method, threads=args.threads, sensitivity=args.sensitivity
+            args.input_fasta,
+            method=args.method,
+            threads=args.threads,
+            sensitivity=args.sensitivity,
+            gap_open=args.gap_open,
+            gap_extend=args.gap_extend,
         )
         save_as_phylip(seq_ids, matrix, args.output_matrix)
         print(f"Matrix saved to {args.output_matrix} ({len(seq_ids)} sequences)")
